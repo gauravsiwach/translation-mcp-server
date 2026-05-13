@@ -1,0 +1,3882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B2B Profile Database Explorer</title>
+<style>
+  :root {
+    --sidebar-bg: #1e293b;
+    --sidebar-hover: #334155;
+    --sidebar-active: #475569;
+    --sidebar-text: #cbd5e1;
+    --sidebar-heading: #94a3b8;
+    --content-bg: #ffffff;
+    --content-secondary: #f8fafc;
+    --accent: #3b82f6;
+    --accent-light: #dbeafe;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-secondary: #64748b;
+    --pk-color: #f59e0b;
+    --pk-bg: #fef3c7;
+    --fk-color: #3b82f6;
+    --fk-bg: #dbeafe;
+    --jsonb-color: #8b5cf6;
+    --jsonb-bg: #ede9fe;
+    --kafka-green: #22c55e;
+    --rest-blue: #3b82f6;
+    --admin-purple: #8b5cf6;
+    --sync-orange: #f97316;
+    --internal-gray: #6b7280;
+    --section-radius: 8px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    color: var(--text);
+    background: var(--content-bg);
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid #0f172a;
+  }
+
+  .sidebar-header {
+    padding: 20px 16px 12px;
+    border-bottom: 1px solid #334155;
+    flex-shrink: 0;
+  }
+
+  .sidebar-header h1 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f1f5f9;
+    letter-spacing: 0.5px;
+  }
+
+  .sidebar-header .subtitle {
+    font-size: 11px;
+    color: var(--sidebar-heading);
+    margin-top: 2px;
+  }
+
+  .search-box {
+    padding: 10px 12px;
+    flex-shrink: 0;
+  }
+
+  .search-box input {
+    width: 100%;
+    padding: 7px 10px 7px 32px;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #e2e8f0;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-box input::placeholder { color: #64748b; }
+  .search-box input:focus { border-color: var(--accent); }
+
+  .search-box {
+    position: relative;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 22px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748b;
+    font-size: 13px;
+    pointer-events: none;
+  }
+
+  .tree-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+
+  .tree-container::-webkit-scrollbar { width: 6px; }
+  .tree-container::-webkit-scrollbar-track { background: transparent; }
+  .tree-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+  .domain-group { margin-bottom: 2px; }
+
+  .domain-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--sidebar-heading);
+    user-select: none;
+    transition: color 0.15s;
+  }
+
+  .domain-header:hover { color: #e2e8f0; }
+
+  .domain-header .chevron {
+    margin-right: 6px;
+    font-size: 10px;
+    transition: transform 0.2s;
+    display: inline-block;
+    width: 12px;
+  }
+
+  .domain-header.collapsed .chevron { transform: rotate(-90deg); }
+
+  .domain-items { overflow: hidden; }
+  .domain-items.hidden { display: none; }
+
+  .table-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px 6px 34px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.1s;
+    color: var(--sidebar-text);
+    border-left: 3px solid transparent;
+  }
+
+  .table-item:hover {
+    background: var(--sidebar-hover);
+    color: #f1f5f9;
+  }
+
+  .table-item.active {
+    background: var(--sidebar-active);
+    border-left-color: var(--accent);
+    color: #ffffff;
+    font-weight: 500;
+  }
+
+  .table-item .table-icon {
+    margin-right: 8px;
+    font-size: 11px;
+    opacity: 0.6;
+  }
+
+  .table-item.hidden-by-search { display: none; }
+
+  .table-count {
+    margin-left: auto;
+    font-size: 10px;
+    background: #334155;
+    padding: 1px 6px;
+    border-radius: 8px;
+    color: #94a3b8;
+  }
+
+  /* ── Main content ── */
+  .main-content {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--content-secondary);
+  }
+
+  .main-content::-webkit-scrollbar { width: 8px; }
+  .main-content::-webkit-scrollbar-track { background: var(--content-secondary); }
+  .main-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+  /* ── Welcome screen ── */
+  .welcome-screen {
+    padding: 40px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .welcome-header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  .welcome-header h2 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .welcome-header p {
+    font-size: 15px;
+    color: var(--text-secondary);
+  }
+
+  .er-svg-container {
+    background: #fafaf8;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 24px 16px;
+    margin-bottom: 32px;
+    overflow-x: auto;
+  }
+
+  .er-svg-container h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+
+  .er-legend {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+  }
+
+  .er-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .er-legend-line-solid {
+    width: 30px;
+    height: 2px;
+    background: #3b82f6;
+  }
+
+  .er-legend-line-dashed {
+    width: 30px;
+    height: 0;
+    border-top: 2px dashed #d97706;
+  }
+
+  .er-legend-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+  }
+
+  .er-legend-badge.one-n { background: #22c55e; }
+  .er-legend-badge.one-one { background: #d97706; }
+  .er-legend-badge.n-m { background: #ef4444; }
+
+  .er-svg-wrap {
+    width: 100%;
+    min-width: 1060px;
+  }
+
+  .er-svg-wrap svg text { user-select: none; }
+
+  .er-svg-wrap svg .er-box {
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+
+  .er-svg-wrap svg .er-box:hover {
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15));
+  }
+
+  /* ── Flow SVG diagrams ── */
+  .flow-svg-container {
+    background: #f8fafb;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 28px;
+    overflow-x: auto;
+  }
+  .flow-svg-container h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #1e293b;
+  }
+  .flow-svg-container svg text { user-select: none; }
+  .flow-svg-container svg .flow-table-box {
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .flow-svg-container svg .flow-table-box:hover {
+    filter: drop-shadow(0 2px 6px rgba(245,158,11,0.35));
+  }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .stat-card .stat-number {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .stat-card .stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  /* ── Detail view ── */
+  .detail-view {
+    display: none;
+    padding: 32px 40px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .detail-view.active { display: block; }
+
+  .detail-header {
+    margin-bottom: 24px;
+  }
+
+  .detail-header .breadcrumb {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .detail-header .breadcrumb span { cursor: pointer; }
+  .detail-header .breadcrumb span:hover { color: var(--accent); }
+
+  .detail-header h2 {
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .detail-header h2 .schema-prefix {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    background: var(--content-secondary);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    gap: 4px;
+  }
+
+  .badge-kafka { background: #dcfce7; color: #166534; }
+  .badge-rest { background: #dbeafe; color: #1e40af; }
+  .badge-admin { background: #ede9fe; color: #5b21b6; }
+  .badge-sync { background: #ffedd5; color: #9a3412; }
+  .badge-internal { background: #f3f4f6; color: #374151; }
+
+  .badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .badge-kafka .badge-dot { background: var(--kafka-green); }
+  .badge-rest .badge-dot { background: var(--rest-blue); }
+  .badge-admin .badge-dot { background: var(--admin-purple); }
+  .badge-sync .badge-dot { background: var(--sync-orange); }
+  .badge-internal .badge-dot { background: var(--internal-gray); }
+
+  /* Sections */
+  .section {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--section-radius);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    padding: 14px 20px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    transition: background 0.1s;
+    border-bottom: 1px solid transparent;
+  }
+
+  .section-header:hover { background: var(--content-secondary); }
+  .section-header.open { border-bottom-color: var(--border); }
+
+  .section-header .section-chevron {
+    margin-right: 10px;
+    font-size: 10px;
+    transition: transform 0.2s;
+    color: var(--text-secondary);
+    display: inline-block;
+  }
+
+  .section-header.collapsed .section-chevron { transform: rotate(-90deg); }
+
+  .section-header .section-count {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--content-secondary);
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-weight: 400;
+  }
+
+  .section-body {
+    padding: 16px 20px;
+    overflow-x: auto;
+  }
+
+  .section-body.hidden { display: none; }
+
+  /* Tables */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .data-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--content-secondary);
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .data-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+  }
+
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: #f8fafc; }
+
+  .col-pk { color: var(--pk-color); font-weight: 600; }
+  .col-fk { color: var(--fk-color); font-weight: 500; cursor: pointer; }
+  .col-fk:hover { text-decoration: underline; }
+  .col-jsonb { color: var(--jsonb-color); font-weight: 500; }
+
+  .col-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
+  .col-tag-pk { background: var(--pk-bg); color: var(--pk-color); }
+  .col-tag-fk { background: var(--fk-bg); color: var(--fk-color); }
+  .col-tag-jsonb { background: var(--jsonb-bg); color: var(--jsonb-color); }
+  .col-tag-unique { background: #ecfdf5; color: #059669; }
+  .col-tag-check { background: #fef3c7; color: #b45309; }
+
+  .type-label {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .nullable-yes { color: #94a3b8; }
+  .nullable-no { color: #ef4444; font-weight: 500; }
+
+  .default-val {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 11px;
+    color: #059669;
+    background: #ecfdf5;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* Constraints */
+  .constraint-list {
+    list-style: none;
+  }
+
+  .constraint-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 13px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .constraint-list li:last-child { border-bottom: none; }
+
+  .constraint-type {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .constraint-pk { background: var(--pk-bg); color: var(--pk-color); }
+  .constraint-unique { background: #ecfdf5; color: #059669; }
+  .constraint-check { background: #fef3c7; color: #b45309; }
+  .constraint-fk { background: var(--fk-bg); color: var(--fk-color); }
+  .constraint-index { background: #f3f4f6; color: #4b5563; }
+
+  /* Relationships */
+  .rel-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .rel-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: white;
+    min-width: 200px;
+  }
+
+  .rel-card:hover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+  }
+
+  .rel-card .rel-type {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-light);
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .rel-card .rel-info {
+    flex: 1;
+  }
+
+  .rel-card .rel-table-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .rel-card .rel-via {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .rel-card .rel-direction {
+    font-size: 16px;
+    color: var(--text-secondary);
+  }
+
+  /* Flow diagram */
+  .flow-diagram {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0;
+    padding: 12px 0;
+  }
+
+  .flow-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .flow-node {
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .flow-node.source { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .flow-node.transport { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .flow-node.processor { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+  .flow-node.dao { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
+  .flow-node.table { background: #fce7f3; color: #9d174d; border: 1px solid #fbcfe8; }
+
+  .flow-arrow {
+    color: #94a3b8;
+    font-size: 18px;
+    margin: 0 4px;
+    flex-shrink: 0;
+  }
+
+  /* JSONB viewer */
+  .jsonb-viewer {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 16px;
+    border-radius: 8px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+    margin-bottom: 12px;
+  }
+
+  .jsonb-viewer .json-key { color: #7dd3fc; }
+  .jsonb-viewer .json-string { color: #86efac; }
+  .jsonb-viewer .json-number { color: #fbbf24; }
+  .jsonb-viewer .json-bool { color: #c084fc; }
+
+  .jsonb-col-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--jsonb-color);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Sample data */
+  .sample-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  .sample-table th {
+    background: var(--content-secondary);
+    padding: 6px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+  }
+
+  .sample-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sample-table tr:hover td { background: #f8fafc; }
+
+  /* Multi-tenancy note */
+  .tenancy-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #1e40af;
+    margin-top: 8px;
+  }
+
+  .tenancy-note .tenancy-icon { font-size: 14px; }
+
+  .overview-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+  }
+
+  .purpose-text {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .note-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #fefce8;
+    border: 1px solid #fde68a;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #854d0e;
+    margin-top: 8px;
+  }
+
+  /* ── Flow item in sidebar ── */
+  .flow-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px 6px 34px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.1s;
+    color: var(--sidebar-text);
+    border-left: 3px solid transparent;
+  }
+
+  .flow-item:hover {
+    background: var(--sidebar-hover);
+    color: #f1f5f9;
+  }
+
+  .flow-item.active {
+    background: var(--sidebar-active);
+    border-left-color: #8b5cf6;
+    color: #ffffff;
+    font-weight: 500;
+  }
+
+  .flow-item .flow-icon {
+    margin-right: 8px;
+    font-size: 12px;
+    opacity: 0.7;
+  }
+
+  .flow-item.coming-soon {
+    opacity: 0.4;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .flow-item .coming-soon-tag {
+    margin-left: auto;
+    font-size: 9px;
+    background: #475569;
+    padding: 1px 5px;
+    border-radius: 6px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  /* ── Flow view (main content) ── */
+  .flow-view {
+    display: none;
+    padding: 32px 40px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .flow-view.active { display: block; }
+
+  .flow-view .flow-header {
+    margin-bottom: 28px;
+  }
+
+  .flow-view .flow-header .breadcrumb {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .flow-view .flow-header .breadcrumb span { cursor: pointer; }
+  .flow-view .flow-header .breadcrumb span:hover { color: var(--accent); }
+
+  .flow-view .flow-header h2 {
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .flow-view .flow-header h2 .flow-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: #ede9fe;
+    color: #5b21b6;
+  }
+
+  .flow-layout {
+    display: flex;
+    gap: 24px;
+  }
+
+  .flow-timeline {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .flow-tables-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+  }
+
+  .flow-tables-panel {
+    position: sticky;
+    top: 32px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .flow-tables-panel h4 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+
+  .flow-table-link {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid #fde68a;
+    background: #fffbeb;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 12px;
+  }
+
+  .flow-table-link:hover {
+    border-color: #f59e0b;
+    background: #fef3c7;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15);
+  }
+
+  .flow-table-link .ftl-name {
+    font-weight: 600;
+    color: var(--text);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+  }
+
+  .flow-table-link .ftl-usage {
+    color: var(--text-secondary);
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .flow-table-link .ftl-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* Phase cards */
+  .phase-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  .phase-card.actor-admin { border-left: 4px solid #8b5cf6; }
+  .phase-card.actor-app { border-left: 4px solid #3b82f6; }
+  .phase-card.actor-customer { border-left: 4px solid #22c55e; }
+  .phase-card.actor-kafka { border-left: 4px solid #059669; }
+  .phase-card.actor-system { border-left: 4px solid #6b7280; }
+  .phase-card.actor-bot { border-left: 4px solid #059669; }
+  .phase-card.actor-pace { border-left: 4px solid #059669; }
+
+  .phase-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--content-secondary);
+  }
+
+  .actor-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .actor-badge.admin { background: #ede9fe; color: #5b21b6; }
+  .actor-badge.app { background: #dbeafe; color: #1e40af; }
+  .actor-badge.customer { background: #dcfce7; color: #166534; }
+  .actor-badge.kafka { background: #d1fae5; color: #065f46; }
+  .actor-badge.system { background: #f3f4f6; color: #374151; }
+  .actor-badge.bot { background: #d1fae5; color: #065f46; }
+  .actor-badge.pace { background: #d1fae5; color: #065f46; }
+
+  .phase-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .phase-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-left: auto;
+  }
+
+  .phase-card-body {
+    padding: 20px;
+  }
+
+  /* Pipeline nodes inside phase cards */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .pipeline-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    position: relative;
+  }
+
+  .pipeline-connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 24px;
+    flex-shrink: 0;
+  }
+
+  .pipeline-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #94a3b8;
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px #e2e8f0;
+    flex-shrink: 0;
+    margin-top: 8px;
+  }
+
+  .pipeline-dot.api { background: #3b82f6; box-shadow: 0 0 0 2px #bfdbfe; }
+  .pipeline-dot.code { background: #94a3b8; box-shadow: 0 0 0 2px #e2e8f0; }
+  .pipeline-dot.table { background: #f59e0b; box-shadow: 0 0 0 2px #fde68a; }
+  .pipeline-dot.data { background: #1e293b; box-shadow: 0 0 0 2px #475569; }
+
+  .pipeline-line {
+    width: 2px;
+    flex: 1;
+    background: #e2e8f0;
+    min-height: 12px;
+  }
+
+  .pipeline-content {
+    flex: 1;
+    padding-bottom: 14px;
+    min-width: 0;
+  }
+
+  .pipeline-step:last-child .pipeline-line { display: none; }
+
+  .pnode-api {
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 20px;
+    background: #3b82f6;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  .pnode-code {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  .pnode-table {
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 8px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1.5px solid #f59e0b;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  .pnode-table:hover {
+    background: #fef3c7;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.2);
+  }
+
+  .pnode-data {
+    display: block;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background: #1e293b;
+    color: #e2e8f0;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .pnode-data .dk { color: #7dd3fc; }
+  .pnode-data .ds { color: #86efac; }
+  .pnode-data .dn { color: #fbbf24; }
+
+  /* Phase connector arrows */
+  .phase-connector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0 6px 40px;
+    margin-bottom: 4px;
+  }
+
+  .phase-connector-line {
+    width: 2px;
+    height: 28px;
+    background: #94a3b8;
+    position: relative;
+  }
+
+  .phase-connector-line::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: -3px;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid #94a3b8;
+  }
+
+  .phase-connector-label {
+    font-size: 11px;
+    color: #94a3b8;
+    font-style: italic;
+    padding: 4px 10px;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 6px;
+  }
+
+  /* Insight box */
+  .insight-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 20px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-left: 4px solid #3b82f6;
+    border-radius: 8px;
+    margin-top: 8px;
+  }
+
+  .insight-box .insight-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .insight-box .insight-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e40af;
+    margin-bottom: 4px;
+  }
+
+  .insight-box .insight-text {
+    font-size: 13px;
+    color: #1e40af;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 900px) {
+    .sidebar { width: 220px; min-width: 220px; }
+    .detail-view { padding: 20px; }
+    .flow-view { padding: 20px; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .welcome-screen { padding: 20px; }
+    .flow-layout { flex-direction: column; }
+    .flow-tables-sidebar { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h1>DB Explorer</h1>
+    <div class="subtitle">B2B Profile &middot; 18 Tables</div>
+  </div>
+  <div class="search-box">
+    <span class="search-icon">&#x1F50D;</span>
+    <input type="text" id="searchInput" placeholder="Filter tables..." />
+  </div>
+  <div class="tree-container" id="treeContainer"></div>
+</aside>
+
+<!-- Main Content -->
+<main class="main-content" id="mainContent">
+  <!-- Welcome screen injected by JS -->
+  <!-- Detail view injected by JS -->
+</main>
+
+<script>
+// ──────────────────────────────────────────
+// DATA MODEL
+// ──────────────────────────────────────────
+const DOMAINS = [
+  {
+    name: "Customer Domain",
+    tables: ["pepsi_distributors","pepsi_customers","pepsi_customer_config","pepsi_customer_master","pepsi_web_metadata"]
+  },
+  {
+    name: "Store Domain",
+    tables: ["pepsi_stores","pepsi_stores_master"]
+  },
+  {
+    name: "Segment Domain",
+    tables: ["pepsi_segment","pepsi_store_segments","pepsi_segment_category","pepsi_folder"]
+  },
+  {
+    name: "Content Domain",
+    tables: ["pepsi_legal_terms","pepsi_translations","pepsi_languages","pepsi_filemetadata"]
+  },
+  {
+    name: "Infrastructure",
+    tables: ["shedlock","sync_retries_job","pepsi_pace_sync"]
+  }
+];
+
+const TABLES = {
+  pepsi_distributors: {
+    purpose: "Distributor/sales entity master data",
+    sources: ["Kafka"],
+    flow: [
+      {label:"SAP",type:"source"},
+      {label:"Kafka",type:"transport"},
+      {label:"StoreMasterConsumer",type:"processor"},
+      {label:"CustomerStoreDataService",type:"dao"},
+      {label:"pepsi_distributors",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_distributors",
+    columns: [
+      {name:"distributor_id",type:"varchar(100)",nullable:false,default:null,pk:true,notes:"Primary identifier"},
+      {name:"name",type:"varchar(255)",nullable:true,default:null,notes:"Distributor name"},
+      {name:"category",type:"varchar(50)",nullable:true,default:null,notes:"e.g. Distributor, Sub-distributor"},
+      {name:"state_code",type:"varchar(10)",nullable:true,default:null,notes:"State/province code"},
+      {name:"contact_person",type:"varchar(100)",nullable:true,default:null,notes:"Primary contact name"},
+      {name:"contact_number",type:"varchar(50)",nullable:true,default:null,notes:"Phone number"},
+      {name:"address",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Structured address"},
+      {name:"is_active",type:"bool",nullable:true,default:"true",notes:"Soft delete flag"},
+      {name:"sales_hierarchy",type:"jsonb",nullable:false,default:"'{}'",jsonb:true,notes:"Region/zone/territory hierarchy"},
+      {name:"created_by",type:"varchar(100)",nullable:true,default:null,notes:""},
+      {name:"updated_by",type:"varchar(100)",nullable:true,default:null,notes:""},
+      {name:"created_datetime",type:"timestamptz",nullable:false,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:false,default:"CURRENT_TIMESTAMP",notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (distributor_id)"}
+    ],
+    indexes: [],
+    relationships: [
+      {type:"1:N",table:"pepsi_customers",via:"distributor_id",direction:"out"}
+    ],
+    jsonbExamples: {
+      address: {"line1":"123 MG Road","city":"Delhi","state":"DL","pincode":"110001"},
+      sales_hierarchy: {"region":"North","zone":"NCR","territory":"Delhi-Central"}
+    },
+    sampleData: {
+      headers: ["distributor_id","name","category","state_code","is_active"],
+      rows: [
+        ["DIST001","PepsiCo Delhi North","Distributor","DL","true"],
+        ["DIST002","Frito-Lay Mumbai West","Sub-distributor","MH","true"]
+      ]
+    }
+  },
+
+  pepsi_customers: {
+    purpose: "Customer user accounts with distributor relationship",
+    sources: ["Kafka","REST API"],
+    flow: [
+      {label:"SAP",type:"source"},
+      {label:"Kafka",type:"transport"},
+      {label:"StoreMasterConsumer",type:"processor"},
+      {label:"CustomerStoreDataService",type:"dao"},
+      {label:"pepsi_customers",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_customers",
+    columns: [
+      {name:"customer_id",type:"varchar(100)",nullable:false,default:null,pk:true,notes:"Primary identifier"},
+      {name:"distributor_id",type:"varchar(100)",nullable:false,default:null,fk:"pepsi_distributors",notes:"FK to distributor"},
+      {name:"user_id",type:"varchar(100)",nullable:true,default:null,unique:true,notes:"Unique user identifier"},
+      {name:"site_id",type:"int4",nullable:true,default:null,notes:"Site reference"},
+      {name:"idp_id",type:"varchar(255)",nullable:true,default:null,notes:"Okta user ID"},
+      {name:"okta_status",type:"varchar(50)",nullable:true,default:null,notes:"Okta account status"},
+      {name:"first_name",type:"varchar(100)",nullable:true,default:null,notes:""},
+      {name:"last_name",type:"varchar(100)",nullable:true,default:null,notes:""},
+      {name:"second_last_name",type:"varchar(100)",nullable:true,default:null,notes:"Mexico naming convention"},
+      {name:"user_type",type:"varchar(50)",nullable:true,default:null,check:"STORE_OWNER, STORE_MANAGER, BUYER, ADMIN, SALES_REP, OTHER",notes:"CHECK constraint"},
+      {name:"email",type:"varchar(190)",nullable:true,default:null,notes:""},
+      {name:"phone",type:"varchar(50)",nullable:true,default:null,notes:""},
+      {name:"account_status",type:"varchar(50)",nullable:false,default:"'ACTIVE'",check:"ACTIVE, INACTIVE, PENDING, SUSPENDED, DELETED",notes:"CHECK constraint"},
+      {name:"is_active",type:"bool",nullable:true,default:"true",notes:"Soft delete"},
+      {name:"email_verified",type:"bool",nullable:true,default:"false",notes:""},
+      {name:"phone_verified",type:"bool",nullable:true,default:"false",notes:""},
+      {name:"is_profile_complete",type:"bool",nullable:true,default:"false",notes:""},
+      {name:"is_test_user",type:"bool",nullable:false,default:"false",notes:"Test data flag"},
+      {name:"data",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"wa_id, custom attributes"},
+      {name:"address",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Structured address"},
+      {name:"created_by",type:"varchar(100)",nullable:true,default:null,notes:""},
+      {name:"updated_by",type:"varchar(100)",nullable:true,default:null,notes:""},
+      {name:"created_datetime",type:"timestamptz",nullable:false,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:false,default:"CURRENT_TIMESTAMP",notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (customer_id)"},
+      {type:"FK",desc:"FOREIGN KEY (distributor_id) REFERENCES pepsi_distributors(distributor_id)"},
+      {type:"UNIQUE",desc:"UNIQUE (user_id)"},
+      {type:"CHECK",desc:"user_type IN (STORE_OWNER, STORE_MANAGER, BUYER, ADMIN, SALES_REP, OTHER)"},
+      {type:"CHECK",desc:"account_status IN (ACTIVE, INACTIVE, PENDING, SUSPENDED, DELETED)"}
+    ],
+    indexes: [
+      {type:"INDEX",desc:"btree(distributor_id)"},
+      {type:"INDEX",desc:"btree(email)"},
+      {type:"INDEX",desc:"btree(idp_id)"},
+      {type:"INDEX",desc:"btree(phone)"},
+      {type:"INDEX",desc:"gin(data->'wa_id')"}
+    ],
+    relationships: [
+      {type:"N:1",table:"pepsi_distributors",via:"distributor_id",direction:"in"},
+      {type:"1:1",table:"pepsi_customer_config",via:"customer_id (no FK enforced)",direction:"out"},
+      {type:"logical",table:"pepsi_web_metadata",via:"data->'wa_id'",direction:"out"},
+      {type:"logical",table:"pepsi_stores",via:"customer_id in stores",direction:"out"}
+    ],
+    jsonbExamples: {
+      data: {"wa_id":["919876543210"],"nick_name":"Raj","display_name":"Raj Kumar"},
+      address: {"line1":"Shop 42, MG Road","city":"Bengaluru","state":"KA","pincode":"560001"}
+    },
+    sampleData: {
+      headers: ["customer_id","distributor_id","first_name","phone","account_status","user_type"],
+      rows: [
+        ["CUST001","DIST001","Rajesh","919876543210","ACTIVE","STORE_OWNER"],
+        ["CUST002","DIST001","Maria","525512345678","ACTIVE","BUYER"],
+        ["CUST003","DIST002","Priya","919123456789","PENDING","STORE_MANAGER"]
+      ]
+    }
+  },
+
+  pepsi_customer_config: {
+    purpose: "Customer preferences, consent records, metadata",
+    sources: ["REST API"],
+    flow: [
+      {label:"App",type:"source"},
+      {label:"BFF",type:"transport"},
+      {label:"POST /v1/api/customers/consent",type:"processor"},
+      {label:"CustomerWriterService",type:"dao"},
+      {label:"pepsi_customer_config",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_customer_config",
+    columns: [
+      {name:"customer_id",type:"varchar(100)",nullable:false,default:null,pk:true,notes:"Matches pepsi_customers PK"},
+      {name:"preferences",type:"jsonb",nullable:false,default:null,jsonb:true,notes:"Language prefs per phone"},
+      {name:"consent",type:"jsonb",nullable:false,default:null,jsonb:true,notes:"T&C, privacy consent records"},
+      {name:"metadata",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"App version, last login, etc."},
+      {name:"created_datetime",type:"timestamptz",nullable:false,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:false,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"created_by",type:"varchar(100)",nullable:true,default:null,notes:""},
+      {name:"updated_by",type:"varchar(100)",nullable:true,default:null,notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (customer_id)"}
+    ],
+    indexes: [],
+    relationships: [
+      {type:"1:1",table:"pepsi_customers",via:"customer_id (no FK enforced)",direction:"in"}
+    ],
+    jsonbExamples: {
+      preferences: {"language":{"919876543210":"en","919123456789":"hi"}},
+      consent: {"terms_and_conditions":{"version":"2.0","accepted_at":"2026-03-15T10:30:00Z"},"privacy_policy":{"version":"1.5","accepted_at":"2026-03-15T10:30:00Z"}},
+      metadata: {"last_login":"2026-04-01T08:15:00Z","app_version":"4.2.1"}
+    },
+    sampleData: {
+      headers: ["customer_id","preferences","consent"],
+      rows: [
+        ["CUST001",'{"language": {"919876543210": "en"}}','{"terms_and_conditions": {"version": "2.0"}}'],
+        ["CUST002",'{"language": {"525512345678": "es"}}','{"terms_and_conditions": {"version": "1.0"}}']
+      ]
+    }
+  },
+
+  pepsi_customer_master: {
+    purpose: "Kafka-sourced master customer data from SAP",
+    sources: ["Kafka"],
+    flow: [
+      {label:"SAP",type:"source"},
+      {label:"Kafka",type:"transport"},
+      {label:"StoreMasterConsumer",type:"processor"},
+      {label:"CustomerStoreDataService",type:"dao"},
+      {label:"pepsi_customer_master",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_customer_master",
+    columns: [
+      {name:"customer_id",type:"varchar(100)",nullable:false,default:null,pk:true,notes:"SAP customer ID"},
+      {name:"data",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Full SAP payload"},
+      {name:"created_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"created_by",type:"varchar(20)",nullable:true,default:null,notes:""},
+      {name:"updated_by",type:"varchar(20)",nullable:true,default:null,notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (customer_id)"}
+    ],
+    indexes: [
+      {type:"INDEX",desc:"gin(data)"}
+    ],
+    relationships: [],
+    jsonbExamples: {
+      data: {"sapCustomerId":"0030175738","name1":"Raj Kumar Store","salesOrg":"IND34","distributionChannel":"10","division":"00","customerGroup":"Z1"}
+    },
+    sampleData: {
+      headers: ["customer_id","data (excerpt)","created_by"],
+      rows: [
+        ["0030175738",'{"sapCustomerId":"0030175738","name1":"Raj Kumar Store"}',"KAFKA"],
+        ["0030175739",'{"sapCustomerId":"0030175739","name1":"Delhi Snacks Hub"}',"KAFKA"]
+      ]
+    }
+  },
+
+  pepsi_web_metadata: {
+    purpose: "WhatsApp ID metadata per customer (India only)",
+    sources: ["REST API"],
+    flow: [
+      {label:"WhatsApp Bot",type:"source"},
+      {label:"POST /v1/api/token/initiate",type:"processor"},
+      {label:"TokenWriterService",type:"dao"},
+      {label:"pepsi_web_metadata",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_web_metadata",
+    columns: [
+      {name:"id",type:"bigserial",nullable:false,default:"auto-increment",pk:true,notes:"Auto-generated ID"},
+      {name:"customer_id",type:"varchar(50)",nullable:false,default:null,notes:"Customer reference"},
+      {name:"wa_id",type:"varchar(100)",nullable:false,default:null,notes:"WhatsApp phone number"},
+      {name:"metadata",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Channel metadata"}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (id)"},
+      {type:"UNIQUE",desc:"UNIQUE (customer_id, wa_id)"}
+    ],
+    indexes: [],
+    relationships: [],
+    jsonbExamples: {
+      metadata: {"channel":"whatsapp","bot_version":"2.1"}
+    },
+    sampleData: {
+      headers: ["id","customer_id","wa_id","metadata"],
+      rows: [
+        ["1","CUST001","919876543210",'{"channel":"whatsapp","bot_version":"2.1"}'],
+        ["2","CUST003","919123456789",'{"channel":"whatsapp","bot_version":"2.1"}']
+      ]
+    }
+  },
+
+  pepsi_stores: {
+    purpose: "Store/location information",
+    sources: ["Kafka"],
+    flow: [
+      {label:"SAP",type:"source"},
+      {label:"Kafka",type:"transport"},
+      {label:"StoreMasterConsumer",type:"processor"},
+      {label:"CustomerStoreDataService",type:"dao"},
+      {label:"pepsi_stores",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_stores",
+    columns: [
+      {name:"store_id",type:"varchar(100)",nullable:false,default:null,pk:true,notes:"Primary identifier"},
+      {name:"store_name",type:"varchar(190)",nullable:true,default:null,notes:""},
+      {name:"customer_id",type:"varchar(100)",nullable:true,default:null,notes:"Owner customer reference"},
+      {name:"location_id",type:"varchar(100)",nullable:true,default:null,notes:""},
+      {name:"location_type",type:"varchar(255)",nullable:true,default:null,notes:""},
+      {name:"site_id",type:"int4",nullable:true,default:null,notes:""},
+      {name:"store_type",type:"varchar(255)",nullable:true,default:null,notes:"e.g. DO, CASH"},
+      {name:"gtmu_id",type:"varchar(10)",nullable:true,default:null,notes:""},
+      {name:"relationship_type_code",type:"varchar(10)",nullable:true,default:null,notes:""},
+      {name:"group_code",type:"varchar(10)",nullable:true,default:null,notes:""},
+      {name:"active_status",type:"bool",nullable:true,default:"true",notes:""},
+      {name:"is_registered",type:"bool",nullable:true,default:"false",notes:"Registration flag"},
+      {name:"is_default",type:"bool",nullable:true,default:"false",notes:"Default store flag"},
+      {name:"registration_date",type:"date",nullable:true,default:null,notes:""},
+      {name:"last_active_date",type:"date",nullable:true,default:null,notes:""},
+      {name:"data",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"tax_id, store_category, permission"},
+      {name:"address",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Structured address with lat/lng"},
+      {name:"contacts",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Phone, email, contact person"},
+      {name:"enhancements",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Delivery days, payment terms"},
+      {name:"created_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"created_by",type:"varchar(20)",nullable:true,default:null,notes:""},
+      {name:"updated_by",type:"varchar(20)",nullable:true,default:null,notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (store_id)"}
+    ],
+    indexes: [
+      {type:"INDEX",desc:"btree(customer_id)"},
+      {type:"INDEX",desc:"btree(location_id)"}
+    ],
+    relationships: [
+      {type:"N:M",table:"pepsi_segment",via:"pepsi_store_segments junction",direction:"out"},
+      {type:"1:1",table:"pepsi_stores_master",via:"store_id (no FK enforced)",direction:"out"}
+    ],
+    jsonbExamples: {
+      data: {"tax_id":"ABCDE1234F","store_category":"Kirana","permission":"ALLOWED"},
+      address: {"line1":"42 Market Street","city":"Mumbai","state":"MH","pincode":"400001","latitude":"19.0760","longitude":"72.8777"},
+      contacts: {"phone":"022-12345678","email":"store42@example.com","contact_person":"Amit Shah"},
+      enhancements: {"delivery_days":["MON","WED","FRI"],"payment_terms":"NET30"}
+    },
+    sampleData: {
+      headers: ["store_id","store_name","customer_id","store_type","active_status"],
+      rows: [
+        ["STR001","Raj Kirana Store","CUST001","DO","true"],
+        ["STR002","Delhi Snacks Corner","CUST001","DO","true"],
+        ["STR003","Mumbai Fresh Mart","CUST003","CASH","false"]
+      ]
+    }
+  },
+
+  pepsi_stores_master: {
+    purpose: "Kafka-sourced master store data from SAP",
+    sources: ["Kafka"],
+    flow: [
+      {label:"SAP",type:"source"},
+      {label:"Kafka",type:"transport"},
+      {label:"StoreMasterConsumer",type:"processor"},
+      {label:"CustomerStoreDataService",type:"dao"},
+      {label:"pepsi_stores_master",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_stores_master",
+    columns: [
+      {name:"store_id",type:"varchar(100)",nullable:false,default:null,pk:true,notes:"Matches pepsi_stores PK"},
+      {name:"data",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Full SAP payload"},
+      {name:"created_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"created_by",type:"varchar(20)",nullable:true,default:null,notes:""},
+      {name:"updated_by",type:"varchar(20)",nullable:true,default:null,notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (store_id)"}
+    ],
+    indexes: [],
+    relationships: [
+      {type:"1:1",table:"pepsi_stores",via:"store_id (no FK enforced)",direction:"in"}
+    ],
+    jsonbExamples: {
+      data: {"sapStoreId":"STR001","salesOrg":"IND34","channel":"10","routeId":"R-NCR-042","deliveryPlant":"PLANT-DL01"}
+    },
+    sampleData: {
+      headers: ["store_id","data (excerpt)","created_by"],
+      rows: [
+        ["STR001",'{"sapStoreId":"STR001","salesOrg":"IND34","routeId":"R-NCR-042"}',"KAFKA"],
+        ["STR002",'{"sapStoreId":"STR002","salesOrg":"IND34","routeId":"R-NCR-055"}',"KAFKA"]
+      ]
+    }
+  },
+
+  pepsi_segment: {
+    purpose: "Market segments with draft/published lifecycle",
+    sources: ["Kafka","Admin UI"],
+    note: "India: Kafka from PACE. Mexico: Admin UI REST.",
+    flow: [
+      {label:"PACE / Admin UI",type:"source"},
+      {label:"Kafka / REST",type:"transport"},
+      {label:"SegmentConsumer / SegmentWriterService",type:"processor"},
+      {label:"SegmentIngestionService",type:"dao"},
+      {label:"pepsi_segment",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_segment",
+    columns: [
+      {name:"segment_id",type:"varchar(100)",nullable:false,default:null,pk:true,notes:"Primary identifier"},
+      {name:"name",type:"varchar(255)",nullable:false,default:null,unique:true,notes:"UNIQUE (case-insensitive via lower())"},
+      {name:"description",type:"varchar(255)",nullable:true,default:null,notes:""},
+      {name:"folder_id",type:"varchar(100)",nullable:false,default:null,fk:"pepsi_folder",notes:"FK to folder"},
+      {name:"source",type:"varchar(50)",nullable:false,default:null,check:"PACE",notes:"CHECK constraint"},
+      {name:"updated_by",type:"varchar(100)",nullable:false,default:null,notes:""},
+      {name:"status",type:"varchar(30)",nullable:false,default:null,check:"DRAFT, PUBLISHED",notes:"Lifecycle status"},
+      {name:"data",type:"jsonb",nullable:false,default:null,jsonb:true,notes:"Criteria, evaluation count"},
+      {name:"created_datetime",type:"timestamptz",nullable:false,default:null,notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:false,default:null,notes:""},
+      {name:"last_edited_page",type:"varchar(50)",nullable:false,default:"'SETUP'",check:"SETUP, REVIEW",notes:"Wizard step tracking"}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (segment_id)"},
+      {type:"FK",desc:"FOREIGN KEY (folder_id) REFERENCES pepsi_folder(folder_id)"},
+      {type:"UNIQUE",desc:"UNIQUE (lower(name)) -- case-insensitive"},
+      {type:"CHECK",desc:"source IN ('PACE')"},
+      {type:"CHECK",desc:"status IN ('DRAFT', 'PUBLISHED')"},
+      {type:"CHECK",desc:"last_edited_page IN ('SETUP', 'REVIEW')"}
+    ],
+    indexes: [],
+    relationships: [
+      {type:"N:1",table:"pepsi_folder",via:"folder_id",direction:"in"},
+      {type:"N:M",table:"pepsi_stores",via:"pepsi_store_segments junction",direction:"out"}
+    ],
+    jsonbExamples: {
+      data: {"criteria":{"store_type":["DO"],"state":["DL","MH"]},"evaluation_count":145}
+    },
+    sampleData: {
+      headers: ["segment_id","name","folder_id","source","status"],
+      rows: [
+        ["SEG001","North India Premium","kafka-imports","PACE","PUBLISHED"],
+        ["SEG002","Mumbai Metro Stores","FLD001","PACE","DRAFT"]
+      ]
+    }
+  },
+
+  pepsi_store_segments: {
+    purpose: "Store-to-segment assignment (N:M junction table)",
+    sources: ["Kafka","Admin UI"],
+    flow: [
+      {label:"PACE / Admin UI",type:"source"},
+      {label:"Kafka / REST",type:"transport"},
+      {label:"SegmentConsumer",type:"processor"},
+      {label:"SegmentIngestionService",type:"dao"},
+      {label:"pepsi_store_segments",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_store_segments",
+    columns: [
+      {name:"id",type:"int8 IDENTITY",nullable:false,default:"auto-increment",pk:true,notes:"Auto-generated"},
+      {name:"store_id",type:"varchar(100)",nullable:false,default:null,fk:"pepsi_stores",notes:"FK to store"},
+      {name:"customer_id",type:"varchar(100)",nullable:false,default:null,notes:"Denormalized customer ref"},
+      {name:"segment_id",type:"varchar(100)",nullable:false,default:null,fk:"pepsi_segment",notes:"FK to segment"},
+      {name:"data",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Extra assignment data"},
+      {name:"created_datetime",type:"timestamptz",nullable:false,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:false,default:null,notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (id)"},
+      {type:"FK",desc:"FOREIGN KEY (store_id) REFERENCES pepsi_stores(store_id)"},
+      {type:"FK",desc:"FOREIGN KEY (segment_id) REFERENCES pepsi_segment(segment_id)"}
+    ],
+    indexes: [],
+    relationships: [
+      {type:"N:1",table:"pepsi_stores",via:"store_id",direction:"in"},
+      {type:"N:1",table:"pepsi_segment",via:"segment_id",direction:"in"}
+    ],
+    jsonbExamples: {},
+    sampleData: {
+      headers: ["id","store_id","customer_id","segment_id"],
+      rows: [
+        ["1","STR001","CUST001","SEG001"],
+        ["2","STR002","CUST001","SEG001"],
+        ["3","STR003","CUST003","SEG002"]
+      ]
+    }
+  },
+
+  pepsi_segment_category: {
+    purpose: "Segment category definitions",
+    sources: ["Admin UI"],
+    flow: [
+      {label:"Admin UI",type:"source"},
+      {label:"REST API",type:"transport"},
+      {label:"SegmentCategoryService",type:"dao"},
+      {label:"pepsi_segment_category",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_segment_category",
+    columns: [
+      {name:"category_id",type:"varchar(100)",nullable:false,default:null,pk:true,notes:"Primary identifier"},
+      {name:"category_name",type:"varchar(255)",nullable:false,default:null,unique:true,notes:"UNIQUE name"},
+      {name:"data",type:"jsonb",nullable:false,default:null,jsonb:true,notes:"Description, icon, etc."},
+      {name:"created_datetime",type:"timestamptz",nullable:false,default:null,notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:false,default:null,notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (category_id)"},
+      {type:"UNIQUE",desc:"UNIQUE (category_name)"}
+    ],
+    indexes: [],
+    relationships: [],
+    jsonbExamples: {
+      data: {"description":"Geographic segments based on state/region","icon":"map-pin"}
+    },
+    sampleData: {
+      headers: ["category_id","category_name","data"],
+      rows: [
+        ["CAT001","Geographic",'{"description":"State/region based"}'],
+        ["CAT002","Store Type",'{"description":"By store classification"}']
+      ]
+    }
+  },
+
+  pepsi_folder: {
+    purpose: "Folder organization for segments",
+    sources: ["Admin UI","Kafka"],
+    note: "Auto-created 'kafka-imports' folder for Kafka-sourced segments.",
+    flow: [
+      {label:"Admin UI / Kafka auto-create",type:"source"},
+      {label:"REST / SegmentConsumer",type:"processor"},
+      {label:"FolderWriterService",type:"dao"},
+      {label:"pepsi_folder",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_folder",
+    columns: [
+      {name:"folder_id",type:"varchar(100)",nullable:false,default:null,pk:true,notes:"Primary identifier"},
+      {name:"name",type:"varchar(255)",nullable:false,default:null,unique:true,notes:"UNIQUE folder name"},
+      {name:"created_datetime",type:"timestamptz",nullable:false,default:null,notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:false,default:null,notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (folder_id)"},
+      {type:"UNIQUE",desc:"UNIQUE (name)"}
+    ],
+    indexes: [],
+    relationships: [
+      {type:"1:N",table:"pepsi_segment",via:"folder_id",direction:"out"}
+    ],
+    jsonbExamples: {},
+    sampleData: {
+      headers: ["folder_id","name"],
+      rows: [
+        ["kafka-imports","Kafka Imports"],
+        ["FLD001","India Promotions"],
+        ["FLD002","Mexico Regional"]
+      ]
+    }
+  },
+
+  pepsi_legal_terms: {
+    purpose: "Legal content (T&C, privacy policy) with versioning",
+    sources: ["Admin UI"],
+    note: "Being renamed to pepsi_content (SRB decision 2026-04-02). Will add JSONB column for CEP fields.",
+    flow: [
+      {label:"Admin UI",type:"source"},
+      {label:"POST /v1/api/contents/legal/upload",type:"processor"},
+      {label:"ContentWriterService",type:"dao"},
+      {label:"pepsi_legal_terms",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_legal_terms",
+    columns: [
+      {name:"id",type:"int8 IDENTITY",nullable:false,default:"auto-increment",pk:true,notes:"Auto-generated"},
+      {name:"language",type:"varchar(10)",nullable:false,default:null,notes:"Language code"},
+      {name:"version",type:"numeric(10,2)",nullable:false,default:null,notes:"Content version"},
+      {name:"url",type:"text",nullable:false,default:null,notes:"CDN URL for content"},
+      {name:"applicable_from",type:"timestamptz",nullable:false,default:null,notes:"Effective date"},
+      {name:"title",type:"varchar(255)",nullable:true,default:null,notes:""},
+      {name:"status",type:"varchar(20)",nullable:false,default:"'PUBLISHED'",check:"PUBLISHED, DEPRECATED, DRAFT, ARCHIVED",notes:"Lifecycle status"},
+      {name:"type",type:"varchar(50)",nullable:false,default:"'TERMS_AND_CONDITIONS'",check:"TERMS_AND_CONDITIONS, PRIVACY_POLICY",notes:"Content type"},
+      {name:"published_at",type:"timestamptz",nullable:true,default:null,notes:""},
+      {name:"content",type:"text",nullable:true,default:null,notes:"Plain text content"},
+      {name:"content_with_html",type:"text",nullable:true,default:null,notes:"HTML version"},
+      {name:"created_at",type:"timestamptz",nullable:false,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_at",type:"timestamptz",nullable:false,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"is_public",type:"bool",nullable:true,default:null,notes:"Public visibility flag"},
+      {name:"customer_type",type:"varchar(50)",nullable:true,default:null,notes:"Target customer type"},
+      {name:"content_key",type:"text",nullable:true,default:null,notes:"Multi-language grouping key"}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (id)"},
+      {type:"UNIQUE",desc:"UNIQUE (language, version, type)"},
+      {type:"CHECK",desc:"status IN ('PUBLISHED', 'DEPRECATED', 'DRAFT', 'ARCHIVED')"},
+      {type:"CHECK",desc:"type IN ('TERMS_AND_CONDITIONS', 'PRIVACY_POLICY')"}
+    ],
+    indexes: [
+      {type:"INDEX",desc:"btree(applicable_from DESC)"},
+      {type:"INDEX",desc:"btree(language, status)"},
+      {type:"INDEX",desc:"btree(language, version) UNIQUE"},
+      {type:"INDEX",desc:"btree(status)"}
+    ],
+    relationships: [],
+    jsonbExamples: {},
+    sampleData: {
+      headers: ["id","language","version","type","status","title"],
+      rows: [
+        ["1","en","2.00","TERMS_AND_CONDITIONS","PUBLISHED","Terms of Use v2"],
+        ["2","hi","2.00","TERMS_AND_CONDITIONS","PUBLISHED","Terms of Use v2 (Hindi)"],
+        ["3","en","1.50","PRIVACY_POLICY","PUBLISHED","Privacy Policy"],
+        ["4","en","1.00","TERMS_AND_CONDITIONS","DEPRECATED","Terms of Use v1"]
+      ]
+    }
+  },
+
+  pepsi_translations: {
+    purpose: "Multi-language label translations (key-value pairs)",
+    sources: ["Admin UI"],
+    flow: [
+      {label:"Admin UI",type:"source"},
+      {label:"POST /v1/api/translation",type:"processor"},
+      {label:"TranslationWriterService",type:"dao"},
+      {label:"pepsi_translations",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_translations",
+    columns: [
+      {name:"id",type:"int8 IDENTITY",nullable:false,default:"auto-increment",pk:true,notes:"Auto-generated"},
+      {name:"label",type:"text",nullable:false,default:null,notes:"Translation key"},
+      {name:"language_code",type:"varchar(10)",nullable:false,default:null,fk:"pepsi_languages",notes:"FK to languages"},
+      {name:"translation",type:"text",nullable:false,default:null,notes:"Translated value"},
+      {name:"type",type:"varchar(255)",nullable:true,default:null,notes:"e.g. Simple text"},
+      {name:"created_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (id)"},
+      {type:"FK",desc:"FOREIGN KEY (language_code) REFERENCES pepsi_languages(language_code)"},
+      {type:"UNIQUE",desc:"UNIQUE (label, language_code)"}
+    ],
+    indexes: [],
+    relationships: [
+      {type:"N:1",table:"pepsi_languages",via:"language_code",direction:"in"}
+    ],
+    jsonbExamples: {},
+    sampleData: {
+      headers: ["id","label","language_code","translation","type"],
+      rows: [
+        ["1","Account.delete_account_confirm","en","Confirm account closure","Simple text"],
+        ["2","Account.delete_account_confirm","hi","Confirm closure (Hindi)","Simple text"],
+        ["3","your_rewards_pending","en","Pending","Simple text"],
+        ["4","your_rewards_pending","es_MX","Pendiente","Simple text"]
+      ]
+    }
+  },
+
+  pepsi_languages: {
+    purpose: "Language code reference table",
+    sources: ["Internal"],
+    flow: [
+      {label:"DB Seed / Admin",type:"source"},
+      {label:"pepsi_languages",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_languages",
+    columns: [
+      {name:"language_code",type:"varchar(10)",nullable:false,default:null,pk:true,notes:"ISO language code"},
+      {name:"language",type:"varchar(100)",nullable:false,default:null,notes:"Human-readable name"},
+      {name:"created_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (language_code)"}
+    ],
+    indexes: [],
+    relationships: [
+      {type:"1:N",table:"pepsi_translations",via:"language_code",direction:"out"}
+    ],
+    jsonbExamples: {},
+    sampleData: {
+      headers: ["language_code","language"],
+      rows: [
+        ["en","English"],
+        ["hi","Hindi"],
+        ["es_MX","Spanish (Mexico)"],
+        ["fr_CA","French (Canada)"]
+      ]
+    }
+  },
+
+  pepsi_filemetadata: {
+    purpose: "File/image metadata storage",
+    sources: ["REST API"],
+    flow: [
+      {label:"App / Admin UI",type:"source"},
+      {label:"File Upload API",type:"processor"},
+      {label:"FileMetadataService",type:"dao"},
+      {label:"pepsi_filemetadata",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_filemetadata",
+    columns: [
+      {name:"id",type:"int8 IDENTITY",nullable:false,default:"auto-increment",pk:true,notes:"Auto-generated"},
+      {name:"created_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"updated_datetime",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""},
+      {name:"data",type:"jsonb",nullable:false,default:null,jsonb:true,notes:"filename, CDN URL, size, etc."}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (id)"}
+    ],
+    indexes: [],
+    relationships: [],
+    jsonbExamples: {
+      data: {"filename":"banner_summer_2026.png","content_type":"image/png","size_bytes":245760,"cdn_url":"https://cdn.pepsiconnect.com/images/banner_summer_2026.png","uploaded_by":"admin@pepsico.com"}
+    },
+    sampleData: {
+      headers: ["id","data (excerpt)"],
+      rows: [
+        ["1",'{"filename":"banner_summer_2026.png","content_type":"image/png"}'],
+        ["2",'{"filename":"promo_mx_q2.jpg","content_type":"image/jpeg"}']
+      ]
+    }
+  },
+
+  pepsi_pace_sync: {
+    purpose: "PACE synchronization audit trail",
+    sources: ["Internal"],
+    flow: [
+      {label:"Kafka Consumer",type:"source"},
+      {label:"SyncAuditService",type:"dao"},
+      {label:"pepsi_pace_sync",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_pace_sync",
+    columns: [
+      {name:"id",type:"int8 IDENTITY",nullable:false,default:"auto-increment",pk:true,notes:"Auto-generated"},
+      {name:"entity_type",type:"varchar(50)",nullable:false,default:null,check:"CUSTOMER, DISTRIBUTOR",notes:"CHECK constraint"},
+      {name:"entity_id",type:"varchar(100)",nullable:false,default:null,notes:"Reference to synced entity"},
+      {name:"batch_id",type:"varchar(100)",nullable:true,default:null,notes:"Kafka batch correlation"},
+      {name:"operation",type:"varchar(20)",nullable:false,default:null,check:"UPSERT, DELETE",notes:"CHECK constraint"},
+      {name:"sync_source",type:"varchar(20)",nullable:true,default:"'PACE'",notes:""},
+      {name:"process_status",type:"varchar(20)",nullable:false,default:null,check:"PENDING, PROCESSING",notes:"Processing state"},
+      {name:"error_message",type:"text",nullable:true,default:null,notes:"Failure details"},
+      {name:"payload_snapshot",type:"jsonb",nullable:true,default:null,jsonb:true,notes:"Kafka message snapshot"},
+      {name:"event_timestamp",type:"timestamptz",nullable:true,default:null,notes:"Original event time"},
+      {name:"created_at",type:"timestamptz",nullable:true,default:"CURRENT_TIMESTAMP",notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (id)"},
+      {type:"CHECK",desc:"entity_type IN ('CUSTOMER', 'DISTRIBUTOR')"},
+      {type:"CHECK",desc:"operation IN ('UPSERT', 'DELETE')"},
+      {type:"CHECK",desc:"process_status IN ('PENDING', 'PROCESSING')"}
+    ],
+    indexes: [
+      {type:"INDEX",desc:"btree(entity_type, entity_id)"}
+    ],
+    relationships: [],
+    jsonbExamples: {
+      payload_snapshot: {"sapId":"0030175738","operation":"UPSERT","timestamp":"2026-04-03T14:00:00Z"}
+    },
+    sampleData: {
+      headers: ["id","entity_type","entity_id","operation","process_status"],
+      rows: [
+        ["1","CUSTOMER","CUST001","UPSERT","PROCESSING"],
+        ["2","DISTRIBUTOR","DIST001","UPSERT","PENDING"]
+      ]
+    }
+  },
+
+  shedlock: {
+    purpose: "Distributed lock management (ShedLock library)",
+    sources: ["Internal"],
+    flow: [
+      {label:"Spring ShedLock",type:"source"},
+      {label:"@SchedulerLock",type:"processor"},
+      {label:"shedlock",type:"table"}
+    ],
+    tenancy: "shedlock (no country prefix)",
+    columns: [
+      {name:"name",type:"varchar(64)",nullable:false,default:null,pk:true,notes:"Lock name / job identifier"},
+      {name:"lock_until",type:"timestamp",nullable:false,default:null,notes:"No timezone! Lock expiry"},
+      {name:"locked_at",type:"timestamp",nullable:false,default:null,notes:"No timezone! Lock acquired"},
+      {name:"locked_by",type:"varchar(255)",nullable:false,default:null,notes:"Instance hostname"}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (name)"}
+    ],
+    indexes: [],
+    relationships: [],
+    jsonbExamples: {},
+    sampleData: {
+      headers: ["name","lock_until","locked_at","locked_by"],
+      rows: [
+        ["segment-sync-job","2026-04-03 15:30:00","2026-04-03 15:00:00","app-instance-1"],
+        ["store-master-cleanup","2026-04-03 16:00:00","2026-04-03 15:45:00","app-instance-2"]
+      ]
+    }
+  },
+
+  sync_retries_job: {
+    purpose: "Retry queue for failed sync operations",
+    sources: ["Internal"],
+    note: "Column 'next_attemp' has a typo (missing 't') -- this is in production.",
+    flow: [
+      {label:"Sync Failure Handler",type:"source"},
+      {label:"RetryService",type:"dao"},
+      {label:"sync_retries_job",type:"table"}
+    ],
+    tenancy: "{country}_{scope}_sync_retries_job",
+    columns: [
+      {name:"retry_key",type:"varchar(255)",nullable:false,default:null,pk:true,notes:"Composite key (type:id)"},
+      {name:"attempts",type:"int4",nullable:false,default:null,notes:"Retry count"},
+      {name:"next_attemp",type:"timestamptz",nullable:false,default:null,notes:"TYPO: missing 't' in 'attempt'"},
+      {name:"created_at",type:"timestamptz",nullable:false,default:null,notes:""},
+      {name:"updated_at",type:"timestamptz",nullable:true,default:null,notes:""}
+    ],
+    constraints: [
+      {type:"PK",desc:"PRIMARY KEY (retry_key)"}
+    ],
+    indexes: [],
+    relationships: [],
+    jsonbExamples: {},
+    sampleData: {
+      headers: ["retry_key","attempts","next_attemp"],
+      rows: [
+        ["okta-sync:CUST001","3","2026-04-03T16:00:00Z"],
+        ["store-upsert:STR042","1","2026-04-03T15:30:00Z"]
+      ]
+    }
+  }
+};
+
+// ──────────────────────────────────────────
+// UTILITY FUNCTIONS
+// ──────────────────────────────────────────
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function getSourceBadge(source) {
+  const map = {
+    'Kafka': {cls:'badge-kafka', label:'Kafka'},
+    'REST API': {cls:'badge-rest', label:'REST API'},
+    'Admin UI': {cls:'badge-admin', label:'Admin UI'},
+    'Sync Service': {cls:'badge-sync', label:'Sync Service'},
+    'Internal': {cls:'badge-internal', label:'Internal'}
+  };
+  const b = map[source] || map['Internal'];
+  return `<span class="badge ${b.cls}"><span class="badge-dot"></span>${esc(b.label)}</span>`;
+}
+
+function syntaxHighlightJSON(obj, indent) {
+  indent = indent || 0;
+  const pad = '  '.repeat(indent);
+  if (obj === null) return '<span class="json-bool">null</span>';
+  if (typeof obj === 'boolean') return `<span class="json-bool">${obj}</span>`;
+  if (typeof obj === 'number') return `<span class="json-number">${obj}</span>`;
+  if (typeof obj === 'string') return `<span class="json-string">"${esc(obj)}"</span>`;
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return '[]';
+    const items = obj.map(v => pad + '  ' + syntaxHighlightJSON(v, indent + 1));
+    return '[\n' + items.join(',\n') + '\n' + pad + ']';
+  }
+  const keys = Object.keys(obj);
+  if (keys.length === 0) return '{}';
+  const entries = keys.map(k => pad + '  <span class="json-key">"' + esc(k) + '"</span>: ' + syntaxHighlightJSON(obj[k], indent + 1));
+  return '{\n' + entries.join(',\n') + '\n' + pad + '}';
+}
+
+function getConstraintClass(type) {
+  const map = { PK:'constraint-pk', FK:'constraint-fk', UNIQUE:'constraint-unique', CHECK:'constraint-check', INDEX:'constraint-index' };
+  return map[type] || 'constraint-index';
+}
+
+// ──────────────────────────────────────────
+// RENDER SIDEBAR
+// ──────────────────────────────────────────
+
+const FLOWS = [
+  { id: 'content-consent', name: 'Content + Consent', enabled: true },
+  { id: 'store-ingestion', name: 'Store & Customer Ingestion', enabled: true },
+  { id: 'translations', name: 'Translations + Language', enabled: true },
+  { id: 'segments', name: 'Segment Assignment', enabled: true },
+  { id: 'whatsapp-metadata', name: 'WhatsApp Metadata', enabled: true }
+];
+
+function renderTree() {
+  const c = document.getElementById('treeContainer');
+  let html = '';
+  DOMAINS.forEach((domain, di) => {
+    html += `<div class="domain-group" data-domain="${di}">`;
+    html += `<div class="domain-header" onclick="toggleDomain(${di})">`;
+    html += `<span class="chevron">&#9660;</span>`;
+    html += `${esc(domain.name)} <span class="table-count">${domain.tables.length}</span>`;
+    html += `</div>`;
+    html += `<div class="domain-items" id="domain-${di}">`;
+    domain.tables.forEach(t => {
+      html += `<div class="table-item" data-table="${t}" onclick="selectTable('${t}')">`;
+      html += `<span class="table-icon">&#9638;</span>${esc(t)}`;
+      html += `</div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  // Flows group
+  const flowIdx = DOMAINS.length;
+  html += `<div class="domain-group" data-domain="${flowIdx}">`;
+  html += `<div class="domain-header" onclick="toggleDomain(${flowIdx})">`;
+  html += `<span class="chevron">&#9660;</span>`;
+  html += `Flows <span class="table-count">${FLOWS.length}</span>`;
+  html += `</div>`;
+  html += `<div class="domain-items" id="domain-${flowIdx}">`;
+  FLOWS.forEach(f => {
+    if (f.enabled) {
+      html += `<div class="flow-item" data-flow="${f.id}" onclick="showFlow('${f.id}')">`;
+      html += `<span class="flow-icon">&#10132;</span>${esc(f.name)}`;
+      html += `</div>`;
+    } else {
+      html += `<div class="flow-item coming-soon">`;
+      html += `<span class="flow-icon">&#10132;</span>${esc(f.name)}`;
+      html += `<span class="coming-soon-tag">soon</span>`;
+      html += `</div>`;
+    }
+  });
+  html += `</div></div>`;
+
+  c.innerHTML = html;
+}
+
+function toggleDomain(idx) {
+  const items = document.getElementById('domain-' + idx);
+  const header = items.previousElementSibling;
+  items.classList.toggle('hidden');
+  header.classList.toggle('collapsed');
+}
+
+// ──────────────────────────────────────────
+// RENDER WELCOME SCREEN
+// ──────────────────────────────────────────
+
+function renderWelcome() {
+  const totalCols = Object.values(TABLES).reduce((s, t) => s + t.columns.length, 0);
+  const jsonbCount = Object.values(TABLES).reduce((s, t) => s + t.columns.filter(c => c.jsonb).length, 0);
+  const fkCount = Object.values(TABLES).reduce((s, t) => s + t.columns.filter(c => c.fk).length, 0);
+
+  // ── SVG ER Diagram builder ──
+  const bw = 182, bh = 56, br = 8;
+  const colX = [30, 270, 530, 790];
+  const colHeaders = ['Core Entities', 'Mirror / Metadata', 'Content & i18n', 'Infrastructure'];
+
+  // Row-Y helper: row 0 starts at y=80, each row is 88px apart
+  const rowY = r => 80 + r * 88;
+
+  // Table definitions: [fullName, displayName, subtitle, col, row, style, prominent]
+  // prominent=true for customers and stores (thicker border)
+  const erBoxes = [
+    // Column 0 — Core
+    ['pepsi_distributors',    'distributors',    'Regional sales entities',     0, 0, 'core',  false],
+    ['pepsi_customers',       'customers',       'User accounts',               0, 1, 'core',  true],
+    ['pepsi_stores',          'stores',          'Physical locations',           0, 3, 'core',  true],
+    ['pepsi_store_segments',  'store_segments',  'N:M junction table',          0, 4, 'core',  false],
+    // Column 1 — Mirror / Metadata
+    ['pepsi_customer_master', 'customer_master', 'SAP mirror (Kafka)',          1, 0, 'mirror', false],
+    ['pepsi_customer_config', 'customer_config', 'Preferences / consent',       1, 1, 'mirror', false],
+    ['pepsi_web_metadata',    'web_metadata',    'WhatsApp IDs',                1, 2, 'mirror', false],
+    ['pepsi_stores_master',   'stores_master',   'SAP mirror (Kafka)',          1, 3, 'mirror', false],
+    // Column 2 — Content & i18n
+    ['pepsi_languages',       'languages',       'Language codes',              2, 0, 'content', false],
+    ['pepsi_translations',    'translations',    'UI label i18n',               2, 1, 'content', false],
+    ['pepsi_legal_terms',     'legal_terms',     'T&C, privacy docs',          2, 2, 'content', false],
+    ['pepsi_folder',          'folder',          'Segment org.',                2, 3, 'content', false],
+    ['pepsi_segment',         'segment',         'Market segments',             2, 4, 'content', false],
+    ['pepsi_segment_category','segment_category','Category defs',              2, 5, 'content', false],
+    // Column 3 — Infrastructure
+    ['pepsi_filemetadata',    'filemetadata',    'File uploads',                3, 0, 'infra', false],
+    ['pepsi_pace_sync',       'pace_sync',       'Sync audit',                  3, 1, 'infra', false],
+    ['shedlock',              'shedlock',        'Distributed locks',           3, 2, 'infra', false],
+    ['sync_retries_job',      'sync_retries_job','Retry queue',                3, 3, 'infra', false],
+  ];
+
+  // Relationship lines: [fromTable, toTable, label, lineType, labelColor]
+  // lineType: 'solid' = FK enforced (blue), 'dashed' = logical (orange)
+  // labelColor: 'green' (1:N), 'amber' (1:1), 'red' (N:M)
+  const erLines = [
+    // FK-enforced (solid blue)
+    ['pepsi_distributors','pepsi_customers',      '1:N','solid','green'],
+    ['pepsi_customers','pepsi_stores',            '1:N','dashed','green'],
+    ['pepsi_stores','pepsi_store_segments',       '1:N','solid','green'],
+    ['pepsi_segment','pepsi_store_segments',      'N:M','solid','red'],
+    ['pepsi_languages','pepsi_translations',      '1:N','solid','green'],
+    ['pepsi_folder','pepsi_segment',              '1:N','solid','green'],
+    // Logical / app-level (dashed orange)
+    ['pepsi_customers','pepsi_customer_config',   '1:1','dashed','amber'],
+    ['pepsi_customers','pepsi_web_metadata',      '1:N','dashed','amber'],
+    ['pepsi_customers','pepsi_customer_master',   '1:1','dashed','amber'],
+    ['pepsi_stores','pepsi_stores_master',        '1:1','dashed','amber'],
+  ];
+
+  // Helper: find box position info by table name
+  function erBoxPos(tbl) {
+    const b = erBoxes.find(e => e[0] === tbl);
+    if (!b) return {cx:0,cy:0,x:0,y:0,right:0,bottom:0,col:0,row:0};
+    const x = colX[b[3]], y = rowY(b[4]);
+    return { x, y, cx: x + bw/2, cy: y + bh/2, right: x + bw, bottom: y + bh, col: b[3], row: b[4] };
+  }
+
+  // SVG height based on max rows
+  const svgH = rowY(6) + 10;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 ${svgH}" width="100%" height="${svgH}" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">`;
+
+  // Defs: arrowheads and column header background filter
+  svg += `<defs>
+    <marker id="ah-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3b82f6"/></marker>
+    <marker id="ah-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d97706"/></marker>
+  </defs>`;
+
+  // Light column background bands
+  const bandColors = ['#eef4ff','#ecfdf5','#f8f8f8','#fff5f5'];
+  colX.forEach((cx, i) => {
+    svg += `<rect x="${cx - 10}" y="36" width="${bw + 20}" height="${svgH - 46}" rx="6" fill="${bandColors[i]}" opacity="0.5"/>`;
+  });
+
+  // Column header labels
+  colHeaders.forEach((h, i) => {
+    svg += `<text x="${colX[i] + bw/2}" y="54" text-anchor="middle" fill="#64748b" font-size="11" font-weight="700" letter-spacing="0.5">${h.toUpperCase()}</text>`;
+  });
+
+  // Draw relationship lines (behind boxes)
+  erLines.forEach(([from, to, label, lineType, color]) => {
+    const a = erBoxPos(from), b = erBoxPos(to);
+    const strokeColor = lineType === 'solid' ? '#3b82f6' : '#d97706';
+    const dash = lineType === 'solid' ? '' : ' stroke-dasharray="6,4"';
+    const marker = lineType === 'solid' ? 'ah-blue' : 'ah-orange';
+    const badgeBg = color === 'green' ? '#22c55e' : color === 'amber' ? '#d97706' : '#ef4444';
+
+    // Determine if this is the reverse N:M line (segment -> store_segments)
+    const isReverse = (from === 'pepsi_segment' && to === 'pepsi_store_segments');
+
+    if (a.col === b.col) {
+      // Same column — vertical line
+      let x1, y1, x2, y2;
+      if (a.row < b.row) {
+        x1 = a.cx; y1 = a.bottom; x2 = b.cx; y2 = b.y;
+      } else {
+        x1 = a.cx; y1 = a.y; x2 = b.cx; y2 = b.bottom;
+      }
+      svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${strokeColor}" stroke-width="1.5"${dash} marker-end="url(#${marker})"/>`;
+      const mx = (x1+x2)/2, my = (y1+y2)/2;
+      svg += `<rect x="${mx-16}" y="${my-9}" width="32" height="18" rx="9" fill="${badgeBg}"/>`;
+      svg += `<text x="${mx}" y="${my+4}" text-anchor="middle" fill="white" font-size="10" font-weight="600">${label}</text>`;
+    } else if (isReverse) {
+      // Special case: segment(col2,row4) -> store_segments(col0,row4) — arrow goes LEFT
+      const x1 = a.x; const y1 = a.cy;
+      const x2 = b.right; const y2 = b.cy;
+      svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${strokeColor}" stroke-width="1.5"${dash} marker-end="url(#${marker})"/>`;
+      const mx = (x1+x2)/2, my = y1;
+      svg += `<rect x="${mx-16}" y="${my-9}" width="32" height="18" rx="9" fill="${badgeBg}"/>`;
+      svg += `<text x="${mx}" y="${my+4}" text-anchor="middle" fill="white" font-size="10" font-weight="600">${label}</text>`;
+    } else {
+      // Cross-column — from right edge of source to left edge of target
+      const x1 = a.right; const y1 = a.cy;
+      const x2 = b.x;     const y2 = b.cy;
+
+      if (Math.abs(y1 - y2) < 2) {
+        // Straight horizontal
+        svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${strokeColor}" stroke-width="1.5"${dash} marker-end="url(#${marker})"/>`;
+        const mx = (x1+x2)/2, my = y1;
+        svg += `<rect x="${mx-16}" y="${my-9}" width="32" height="18" rx="9" fill="${badgeBg}"/>`;
+        svg += `<text x="${mx}" y="${my+4}" text-anchor="middle" fill="white" font-size="10" font-weight="600">${label}</text>`;
+      } else {
+        // L-shaped path
+        const midX = x1 + (x2-x1)*0.5;
+        svg += `<path d="M${x1},${y1} L${midX},${y1} L${midX},${y2} L${x2},${y2}" fill="none" stroke="${strokeColor}" stroke-width="1.5"${dash} marker-end="url(#${marker})"/>`;
+        const mx = midX, my = (y1+y2)/2;
+        svg += `<rect x="${mx-16}" y="${my-9}" width="32" height="18" rx="9" fill="${badgeBg}"/>`;
+        svg += `<text x="${mx}" y="${my+4}" text-anchor="middle" fill="white" font-size="10" font-weight="600">${label}</text>`;
+      }
+    }
+  });
+
+  // Draw boxes on top
+  erBoxes.forEach(([fullName, displayName, subtitle, col, row, style, prominent]) => {
+    const x = colX[col], y = rowY(row);
+    let fill, stroke, strokeW, textFill, subFill;
+
+    switch (style) {
+      case 'core':
+        fill = '#eef4ff'; stroke = '#4f6fcf'; textFill = '#1e293b'; subFill = '#64748b'; break;
+      case 'mirror':
+        fill = '#ecfdf5'; stroke = '#34d399'; textFill = '#065f46'; subFill = '#6ee7b7'; break;
+      case 'content':
+        fill = '#f8f8f8'; stroke = '#a1a1aa'; textFill = '#1e293b'; subFill = '#71717a'; break;
+      case 'infra':
+        fill = '#fff5f5'; stroke = '#a1a1aa'; textFill = '#64748b'; subFill = '#94a3b8'; break;
+      default:
+        fill = '#ffffff'; stroke = '#e2e8f0'; textFill = '#1e293b'; subFill = '#64748b';
+    }
+
+    strokeW = prominent ? 2.5 : 1.5;
+
+    svg += `<g class="er-box" onclick="selectTable('${fullName}')">`;
+    svg += `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="${br}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}"/>`;
+    svg += `<text x="${x + bw/2}" y="${y + 23}" text-anchor="middle" fill="${textFill}" font-size="13" font-weight="${prominent ? 800 : 700}" font-family="'SF Mono',SFMono-Regular,Consolas,monospace">${displayName}</text>`;
+    svg += `<text x="${x + bw/2}" y="${y + 40}" text-anchor="middle" fill="${subFill}" font-size="10">${subtitle}</text>`;
+    svg += `</g>`;
+  });
+
+  svg += `</svg>`;
+
+  return `
+    <div class="welcome-screen" id="welcomeScreen">
+      <div class="welcome-header">
+        <h2>B2B Profile Database Schema</h2>
+        <p>PepsiConnect Customer Domain &middot; Spring Boot CQRS &middot; PostgreSQL &middot; 18 Tables</p>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-number">18</div><div class="stat-label">Tables</div></div>
+        <div class="stat-card"><div class="stat-number">${totalCols}</div><div class="stat-label">Columns</div></div>
+        <div class="stat-card"><div class="stat-number">${jsonbCount}</div><div class="stat-label">JSONB Columns</div></div>
+        <div class="stat-card"><div class="stat-number">${fkCount}</div><div class="stat-label">Foreign Keys</div></div>
+      </div>
+
+      <div class="er-svg-container">
+        <h3>Entity Relationship Diagram</h3>
+        <div class="er-legend">
+          <div class="er-legend-item"><div class="er-legend-line-solid"></div> FK enforced</div>
+          <div class="er-legend-item"><div class="er-legend-line-dashed"></div> Logical / app-level</div>
+          <div class="er-legend-item"><span class="er-legend-badge one-n">1:N</span> One-to-Many</div>
+          <div class="er-legend-item"><span class="er-legend-badge one-one">1:1</span> One-to-One</div>
+          <div class="er-legend-item"><span class="er-legend-badge n-m">N:M</span> Many-to-Many</div>
+        </div>
+        <div class="er-svg-wrap">${svg}</div>
+      </div>
+
+      <div class="section" style="margin-bottom:0;">
+        <div class="section-header open" style="cursor:default;">
+          <span class="section-chevron">&#9660;</span>
+          Multi-Tenancy Pattern
+        </div>
+        <div class="section-body">
+          <div class="tenancy-note" style="margin-top:0;">
+            <span class="tenancy-icon">&#127760;</span>
+            <div>
+              <strong>Schema prefix pattern:</strong> <code>{country}_{scope}_{tablename}</code><br/>
+              Examples: <code>ind_pepsi_customers</code>, <code>mx_pepsi_stores</code>, <code>ca_pepsi_translations</code><br/>
+              Country resolved from Bearer token via <code>ControllerUtils</code>. Schema resolved via <code>TableNameService</code>.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ──────────────────────────────────────────
+// RENDER DETAIL VIEW
+// ──────────────────────────────────────────
+
+function renderDetail(tableName) {
+  const t = TABLES[tableName];
+  if (!t) return '';
+
+  const badges = t.sources.map(getSourceBadge).join(' ');
+
+  // Overview section
+  let overviewHtml = `
+    <p class="purpose-text">${esc(t.purpose)}</p>
+    <div class="overview-meta">${badges}</div>
+    <div class="tenancy-note">
+      <span class="tenancy-icon">&#127760;</span>
+      <span>Schema: <code>${esc(t.tenancy)}</code></span>
+    </div>
+  `;
+  if (t.note) {
+    overviewHtml += `<div class="note-box">&#9888; ${esc(t.note)}</div>`;
+  }
+
+  // Columns section
+  let colRows = '';
+  t.columns.forEach(c => {
+    let nameClass = '';
+    let tags = '';
+    if (c.pk) { nameClass = 'col-pk'; tags += '<span class="col-tag col-tag-pk">PK</span>'; }
+    if (c.fk) { nameClass = 'col-fk'; tags += `<span class="col-tag col-tag-fk">FK</span>`; }
+    if (c.jsonb) { nameClass = nameClass || 'col-jsonb'; tags += '<span class="col-tag col-tag-jsonb">JSONB</span>'; }
+    if (c.unique) { tags += '<span class="col-tag col-tag-unique">UQ</span>'; }
+    if (c.check) { tags += `<span class="col-tag col-tag-check">CHK</span>`; }
+
+    const nameHtml = c.fk
+      ? `<span class="${nameClass}" onclick="selectTable('${c.fk}')" title="Navigate to ${c.fk}">${esc(c.name)}</span>${tags}`
+      : `<span class="${nameClass}">${esc(c.name)}</span>${tags}`;
+
+    const nullHtml = c.nullable
+      ? '<span class="nullable-yes">YES</span>'
+      : '<span class="nullable-no">NOT NULL</span>';
+
+    const defHtml = c.default ? `<span class="default-val">${esc(c.default)}</span>` : '<span style="color:#cbd5e1;">-</span>';
+
+    let notesHtml = esc(c.notes || '');
+    if (c.check) notesHtml += (notesHtml ? '<br/>' : '') + '<span style="font-size:11px;color:#b45309;">' + esc(c.check) + '</span>';
+    if (c.fk) notesHtml += (notesHtml ? '<br/>' : '') + '<span style="font-size:11px;color:var(--fk-color);">References ' + esc(c.fk) + '</span>';
+
+    colRows += `<tr>
+      <td>${nameHtml}</td>
+      <td><span class="type-label">${esc(c.type)}</span></td>
+      <td>${nullHtml}</td>
+      <td>${defHtml}</td>
+      <td>${notesHtml}</td>
+    </tr>`;
+  });
+
+  const columnsHtml = `
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Nullable</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>${colRows}</tbody>
+    </table>
+  `;
+
+  // Constraints & Indexes
+  let constraintHtml = '<ul class="constraint-list">';
+  t.constraints.forEach(c => {
+    constraintHtml += `<li><span class="constraint-type ${getConstraintClass(c.type)}">${esc(c.type)}</span><span>${esc(c.desc)}</span></li>`;
+  });
+  t.indexes.forEach(idx => {
+    constraintHtml += `<li><span class="constraint-type constraint-index">INDEX</span><span>${esc(idx.desc)}</span></li>`;
+  });
+  if (t.constraints.length === 0 && t.indexes.length === 0) {
+    constraintHtml += '<li style="color:var(--text-secondary);font-style:italic;">No additional constraints or indexes defined.</li>';
+  }
+  constraintHtml += '</ul>';
+
+  // Relationships
+  let relHtml = '';
+  if (t.relationships.length > 0) {
+    relHtml = '<div class="rel-cards">';
+    t.relationships.forEach(r => {
+      const arrow = r.direction === 'out' ? '&#8594;' : '&#8592;';
+      relHtml += `
+        <div class="rel-card" onclick="selectTable('${r.table}')">
+          <span class="rel-type">${esc(r.type)}</span>
+          <div class="rel-info">
+            <div class="rel-table-name">${esc(r.table)}</div>
+            <div class="rel-via">via ${esc(r.via)}</div>
+          </div>
+          <span class="rel-direction">${arrow}</span>
+        </div>
+      `;
+    });
+    relHtml += '</div>';
+  } else {
+    relHtml = '<p style="color:var(--text-secondary);font-style:italic;">No direct relationships.</p>';
+  }
+
+  // Data flow
+  let flowHtml = '<div class="flow-diagram">';
+  t.flow.forEach((step, i) => {
+    if (i > 0) flowHtml += '<span class="flow-arrow">&#8594;</span>';
+    flowHtml += `<span class="flow-node ${step.type}">${esc(step.label)}</span>`;
+  });
+  flowHtml += '</div>';
+
+  // JSONB structure
+  const jsonbKeys = Object.keys(t.jsonbExamples || {});
+  let jsonbHtml = '';
+  if (jsonbKeys.length > 0) {
+    jsonbKeys.forEach(key => {
+      jsonbHtml += `<div class="jsonb-col-label">&#9670; ${esc(key)}</div>`;
+      jsonbHtml += `<div class="jsonb-viewer">${syntaxHighlightJSON(t.jsonbExamples[key])}</div>`;
+    });
+  }
+
+  // Sample data
+  let sampleHtml = '<table class="sample-table"><thead><tr>';
+  t.sampleData.headers.forEach(h => { sampleHtml += `<th>${esc(h)}</th>`; });
+  sampleHtml += '</tr></thead><tbody>';
+  t.sampleData.rows.forEach(row => {
+    sampleHtml += '<tr>';
+    row.forEach(cell => { sampleHtml += `<td title="${esc(cell)}">${esc(cell)}</td>`; });
+    sampleHtml += '</tr>';
+  });
+  sampleHtml += '</tbody></table>';
+
+  // Assemble sections
+  const sections = [
+    {id:'overview', title:'Overview', content: overviewHtml, open:true},
+    {id:'columns', title:'Columns', count: t.columns.length, content: columnsHtml, open:true},
+    {id:'constraints', title:'Constraints & Indexes', count: t.constraints.length + t.indexes.length, content: constraintHtml, open:true},
+    {id:'relationships', title:'Relationships', count: t.relationships.length, content: relHtml, open:true},
+    {id:'flow', title:'Data Source Flow', content: flowHtml, open:true},
+  ];
+
+  if (jsonbKeys.length > 0) {
+    sections.push({id:'jsonb', title:'JSONB Structure', count: jsonbKeys.length, content: jsonbHtml, open:false});
+  }
+
+  sections.push({id:'sample', title:'Sample Data', count: t.sampleData.rows.length + ' rows', content: sampleHtml, open:false});
+
+  let sectionsHtml = '';
+  sections.forEach(s => {
+    const countBadge = s.count !== undefined ? `<span class="section-count">${s.count}</span>` : '';
+    const openCls = s.open ? 'open' : 'collapsed';
+    const hiddenCls = s.open ? '' : 'hidden';
+    sectionsHtml += `
+      <div class="section">
+        <div class="section-header ${openCls}" onclick="toggleSection(this)">
+          <span class="section-chevron">&#9660;</span>
+          ${esc(s.title)}
+          ${countBadge}
+        </div>
+        <div class="section-body ${hiddenCls}">${s.content}</div>
+      </div>
+    `;
+  });
+
+  return `
+    <div class="detail-view active" id="detailView">
+      <div class="detail-header">
+        <div class="breadcrumb">
+          <span onclick="showWelcome()">Schema</span> &rsaquo; ${esc(tableName)}
+        </div>
+        <h2>
+          ${esc(tableName)}
+          <span class="schema-prefix">${esc(t.tenancy)}</span>
+        </h2>
+      </div>
+      ${sectionsHtml}
+    </div>
+  `;
+}
+
+// ──────────────────────────────────────────
+// INTERACTION
+// ──────────────────────────────────────────
+
+let currentTable = null;
+let currentFlow = null;
+
+function selectTable(tableName) {
+  if (!TABLES[tableName]) return;
+  currentTable = tableName;
+  currentFlow = null;
+
+  // Update sidebar active state
+  document.querySelectorAll('.table-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.flow-item').forEach(el => el.classList.remove('active'));
+  const activeItem = document.querySelector(`.table-item[data-table="${tableName}"]`);
+  if (activeItem) {
+    activeItem.classList.add('active');
+    // Ensure parent domain is expanded
+    const domainItems = activeItem.closest('.domain-items');
+    if (domainItems && domainItems.classList.contains('hidden')) {
+      domainItems.classList.remove('hidden');
+      domainItems.previousElementSibling.classList.remove('collapsed');
+    }
+  }
+
+  // Render detail
+  document.getElementById('mainContent').innerHTML = renderDetail(tableName);
+  document.getElementById('mainContent').scrollTop = 0;
+}
+
+function showWelcome() {
+  currentTable = null;
+  currentFlow = null;
+  document.querySelectorAll('.table-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.flow-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('mainContent').innerHTML = renderWelcome();
+}
+
+function toggleSection(header) {
+  header.classList.toggle('collapsed');
+  header.classList.toggle('open');
+  const body = header.nextElementSibling;
+  body.classList.toggle('hidden');
+}
+
+// Search
+document.getElementById('searchInput').addEventListener('input', function(e) {
+  const query = e.target.value.toLowerCase().trim();
+  document.querySelectorAll('.table-item').forEach(el => {
+    const name = el.dataset.table;
+    if (!query || name.includes(query)) {
+      el.classList.remove('hidden-by-search');
+    } else {
+      el.classList.add('hidden-by-search');
+    }
+  });
+
+  // Show/hide domain groups based on visible children
+  document.querySelectorAll('.domain-group').forEach(group => {
+    const visibleTableItems = group.querySelectorAll('.table-item:not(.hidden-by-search)');
+    const flowItems = group.querySelectorAll('.flow-item');
+    // Flows group: always visible when no query, hidden when query doesn't match
+    const hasVisibleContent = visibleTableItems.length > 0 || (flowItems.length > 0 && !query);
+    group.style.display = hasVisibleContent ? '' : 'none';
+    // Expand groups when searching
+    if (query) {
+      const items = group.querySelector('.domain-items');
+      const header = group.querySelector('.domain-header');
+      if (items) items.classList.remove('hidden');
+      if (header) header.classList.remove('collapsed');
+    }
+  });
+});
+
+// ──────────────────────────────────────────
+// FLOW RENDERING
+// ──────────────────────────────────────────
+
+function showFlow(flowId) {
+  currentTable = null;
+  currentFlow = flowId;
+
+  // Clear sidebar active states
+  document.querySelectorAll('.table-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.flow-item').forEach(el => el.classList.remove('active'));
+  const activeFlow = document.querySelector(`.flow-item[data-flow="${flowId}"]`);
+  if (activeFlow) activeFlow.classList.add('active');
+
+  const renderers = {
+    'content-consent': renderContentConsentFlow,
+    'store-ingestion': renderStoreIngestionFlow,
+    'translations': renderTranslationsFlow,
+    'segments': renderSegmentsFlow,
+    'whatsapp-metadata': renderWhatsappMetadataFlow
+  };
+
+  const renderer = renderers[flowId];
+  if (renderer) {
+    document.getElementById('mainContent').innerHTML = renderer();
+    document.getElementById('mainContent').scrollTop = 0;
+  }
+}
+
+function makePipelineStep(dotClass, content) {
+  return `
+    <div class="pipeline-step">
+      <div class="pipeline-connector">
+        <div class="pipeline-dot ${dotClass}"></div>
+        <div class="pipeline-line"></div>
+      </div>
+      <div class="pipeline-content">${content}</div>
+    </div>`;
+}
+
+function makePhaseConnector(label) {
+  return `
+    <div class="phase-connector">
+      <div class="phase-connector-line"></div>
+      <span class="phase-connector-label">${esc(label)}</span>
+    </div>`;
+}
+
+function renderContentConsentFlow() {
+  // Phase 1: Content Creation
+  const phase1 = `
+    <div class="phase-card actor-admin">
+      <div class="phase-card-header">
+        <span class="actor-badge admin">Admin</span>
+        <span class="phase-title">Phase 1: Content Creation</span>
+        <span class="phase-desc">Admin uploads new legal content</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">POST /v1/api/contents/legal/upload</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">ContentWriterController &#8594; ContentWriterService &#8594; ContentWriterDao</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_legal_terms')">pepsi_legal_terms</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">INSERT INTO</span> pepsi_legal_terms
+  <span class="dk">language</span>=<span class="ds">'en'</span>, <span class="dk">version</span>=<span class="dn">2.00</span>,
+  <span class="dk">type</span>=<span class="ds">'TERMS_AND_CONDITIONS'</span>,
+  <span class="dk">content</span>=<span class="ds">'You agree to...'</span>,
+  <span class="dk">status</span>=<span class="ds">'PUBLISHED'</span>,
+  <span class="dk">applicable_from</span>=<span class="dn">now()</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  // Phase 2: App Fetches Latest
+  const phase2 = `
+    <div class="phase-card actor-app">
+      <div class="phase-card-header">
+        <span class="actor-badge app">Mobile App</span>
+        <span class="phase-title">Phase 2: App Fetches Latest Content</span>
+        <span class="phase-desc">Read side serves published content</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">GET /v1/api/contents/latest?scope=pepsi</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">ContentReaderController &#8594; ContentReaderService &#8594; ContentReaderDao</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_legal_terms')">pepsi_legal_terms</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">SELECT FROM</span> pepsi_legal_terms
+  <span class="dk">WHERE</span> <span class="dk">status</span>=<span class="ds">'PUBLISHED'</span>
+    <span class="dk">AND</span> <span class="dk">applicable_from</span> &lt;= <span class="dn">now()</span>
+  <span class="dk">ORDER BY</span> <span class="dk">version</span> <span class="dk">DESC</span>
+  <span class="dk">LIMIT</span> <span class="dn">1</span> <span class="dk">per type</span></div>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#0c4a6e;"><span class="dk">Response:</span>
+{
+  <span class="dk">"type"</span>: <span class="ds">"TERMS_AND_CONDITIONS"</span>,
+  <span class="dk">"version"</span>: <span class="dn">2.0</span>,
+  <span class="dk">"content"</span>: {
+    <span class="ds">"en"</span>: <span class="ds">"You agree to..."</span>,
+    <span class="ds">"hi"</span>: <span class="ds">"&#x0906;&#x092A; &#x0938;&#x0939;&#x092E;&#x0924; &#x0939;&#x0948;&#x0902;..."</span>
+  }
+}</div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  // Phase 3: Customer Accepts
+  const phase3 = `
+    <div class="phase-card actor-customer">
+      <div class="phase-card-header">
+        <span class="actor-badge customer">Customer</span>
+        <span class="phase-title">Phase 3: Customer Accepts</span>
+        <span class="phase-desc">Consent recorded in JSONB</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">POST /v1/api/customers/consent</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#14532d;"><span class="dk">Request Body:</span>
+{
+  <span class="dk">"customerId"</span>: <span class="ds">"CUST001"</span>,
+  <span class="dk">"type"</span>: <span class="ds">"TERMS_AND_CONDITIONS"</span>,
+  <span class="dk">"version"</span>: <span class="ds">"2.0"</span>,
+  <span class="dk">"language"</span>: <span class="ds">"en"</span>,
+  <span class="dk">"waid"</span>: <span class="ds">"919876543210"</span>
+}</div>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">CustomerWriterController &#8594; CustomerConsentWriterService &#8594; ConsentWriterDao</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_customer_config')">pepsi_customer_config</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span style="color:#94a3b8;">1.</span> <span class="dk">SELECT</span> consent <span class="dk">FROM</span> pepsi_customer_config
+   <span class="dk">WHERE</span> customer_id = <span class="ds">'CUST001'</span>
+
+<span style="color:#94a3b8;">2.</span> Parse existing consent JSON
+
+<span style="color:#94a3b8;">3.</span> Append to <span class="ds">"TERMS_AND_CONDITIONS"</span> array:
+   { <span class="dk">"version"</span>: <span class="ds">"2.0"</span>,
+     <span class="dk">"language"</span>: <span class="ds">"en"</span>,
+     <span class="dk">"acceptedAt"</span>: <span class="dn">1712145000000</span> }
+
+<span style="color:#94a3b8;">4.</span> <span class="dk">UPDATE</span> pepsi_customer_config
+   <span class="dk">SET</span> consent = <span class="ds">:updatedJson</span>
+   <span style="color:#94a3b8;">(or INSERT if no row exists)</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  // Phase 4: Next App Launch
+  const phase4 = `
+    <div class="phase-card actor-app">
+      <div class="phase-card-header">
+        <span class="actor-badge app">Mobile App</span>
+        <span class="phase-title">Phase 4: Next Launch (Consent Check)</span>
+        <span class="phase-desc">App compares versions to decide re-consent</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">GET /v1/api/contents/latest</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">version 2.0 from</span>
+             <span class="pnode-table" onclick="selectTable('pepsi_legal_terms')" style="font-size:12px;padding:3px 10px;margin-left:4px;">pepsi_legal_terms</span>`
+          )}
+          ${makePipelineStep('api',
+            `<span class="pnode-api">GET /v1/api/customers/consent</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">version 2.0 from</span>
+             <span class="pnode-table" onclick="selectTable('pepsi_customer_config')" style="font-size:12px;padding:3px 10px;margin-left:4px;">pepsi_customer_config</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#1e3a5f;"><span class="dk">App compares:</span>  <span class="dn">2.0</span> == <span class="dn">2.0</span>  <span style="color:#22c55e;">&#10003; No re-consent needed</span>
+
+<span style="color:#94a3b8;">If admin uploads version 3.0:</span>
+  <span class="dn">3.0</span> != <span class="dn">2.0</span>  <span style="color:#ef4444;">&#10007; Forces re-accept</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  // Insight box
+  const insightBox = `
+    <div class="insight-box">
+      <span class="insight-icon">&#128273;</span>
+      <div>
+        <div class="insight-title">Key Insight</div>
+        <div class="insight-text">
+          The <strong>version string</strong> is the glue between <code>pepsi_legal_terms</code> and <code>pepsi_customer_config</code>.
+          It is a soft reference inside JSONB &mdash; no FK, no constraint. The mobile app bridges these two tables by comparing
+          the latest published version against the customer's last accepted version.
+        </div>
+      </div>
+    </div>`;
+
+  // Tables sidebar
+  const tablesSidebar = `
+    <div class="flow-tables-sidebar">
+      <div class="flow-tables-panel">
+        <h4>Tables Used</h4>
+        <div class="flow-table-link" onclick="selectTable('pepsi_legal_terms')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_legal_terms</div>
+            <div class="ftl-usage">Write in Phase 1, Read in Phase 2 &amp; 4</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_customer_config')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_customer_config</div>
+            <div class="ftl-usage">Write in Phase 3, Read in Phase 4</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  return `
+    <div class="flow-view active" id="flowView">
+      <div class="flow-header">
+        <div class="breadcrumb">
+          <span onclick="showWelcome()">&#8592; Back to Overview</span>
+        </div>
+        <h2>
+          Content + Consent Flow
+          <span class="flow-badge">4 Phases</span>
+        </h2>
+      </div>
+      <div class="flow-svg-container">
+        <h3>Flow Overview</h3>
+        <svg viewBox="0 0 950 290" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:900px;height:auto;">
+          <defs>
+            <marker id="ccArrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#94a3b8"/></marker>
+          </defs>
+          <!-- Row 1: Write path -->
+          <rect x="20" y="30" width="120" height="40" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+          <text x="80" y="55" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">Admin UI</text>
+          <rect x="200" y="22" width="190" height="24" rx="12" fill="#3b82f6"/>
+          <text x="295" y="39" text-anchor="middle" font-size="11" font-weight="600" fill="white">POST /upload (legal content)</text>
+          <line x1="140" y1="50" x2="200" y2="38" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ccArrow)"/>
+          <line x1="390" y1="38" x2="450" y2="50" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ccArrow)"/>
+          <rect class="flow-table-box" onclick="selectTable('pepsi_legal_terms')" x="450" y="25" width="200" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="550" y="45" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_legal_terms</text>
+          <text x="550" y="62" text-anchor="middle" font-size="10" fill="#a16207">version, type, content, status</text>
+          <!-- Arrow down from legal_terms -->
+          <line x1="550" y1="73" x2="550" y2="110" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ccArrow)"/>
+          <text x="560" y="96" font-size="10" fill="#64748b">version=2.0 exists</text>
+          <!-- Row 2: Read + Accept -->
+          <rect x="20" y="120" width="120" height="40" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+          <text x="80" y="145" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">Mobile App</text>
+          <rect x="200" y="118" width="190" height="24" rx="12" fill="#3b82f6"/>
+          <text x="295" y="135" text-anchor="middle" font-size="11" font-weight="600" fill="white">GET /contents/latest</text>
+          <line x1="500" y1="115" x2="390" y2="130" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ccArrow)"/>
+          <line x1="200" y1="130" x2="140" y2="140" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ccArrow)"/>
+          <!-- Arrow down: customer taps accept -->
+          <line x1="80" y1="160" x2="80" y2="200" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ccArrow)"/>
+          <text x="90" y="185" font-size="10" fill="#64748b">Customer taps Accept</text>
+          <!-- Row 3: Consent -->
+          <rect x="200" y="195" width="160" height="24" rx="12" fill="#3b82f6"/>
+          <text x="280" y="212" text-anchor="middle" font-size="11" font-weight="600" fill="white">POST /consent</text>
+          <line x1="80" y1="210" x2="200" y2="210" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ccArrow)"/>
+          <line x1="360" y1="210" x2="450" y2="210" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ccArrow)"/>
+          <rect class="flow-table-box" onclick="selectTable('pepsi_customer_config')" x="450" y="190" width="200" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="550" y="210" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_customer_config</text>
+          <text x="550" y="227" text-anchor="middle" font-size="10" fill="#a16207">consent JSONB: {version: "2.0"}</text>
+          <!-- Hint -->
+          <text x="940" y="280" text-anchor="end" font-size="10" fill="#94a3b8" font-style="italic">Click any table to view details</text>
+        </svg>
+      </div>
+      <div class="flow-layout">
+        <div class="flow-timeline">
+          ${phase1}
+          ${makePhaseConnector('version=2.0 now exists in DB')}
+          ${phase2}
+          ${makePhaseConnector('version=2.0 sent to app, customer sees it')}
+          ${phase3}
+          ${makePhaseConnector('version=2.0 recorded in consent JSONB')}
+          ${phase4}
+          ${insightBox}
+        </div>
+        ${tablesSidebar}
+      </div>
+    </div>`;
+}
+
+// ──────────────────────────────────────────
+// FLOW: Store & Customer Ingestion
+// ──────────────────────────────────────────
+
+function renderStoreIngestionFlow() {
+  const phase1 = `
+    <div class="phase-card actor-kafka">
+      <div class="phase-card-header">
+        <span class="actor-badge kafka">SAP System</span>
+        <span class="phase-title">Phase 1: SAP Publishes to Kafka</span>
+        <span class="phase-desc">Customer/distributor/store data from SAP</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">Kafka Topic: ADAPTER.OUTPUT.B2B.INDIA.CUSTOMERDISTRIBUTOR</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#14532d;"><span class="dk">Payload:</span>
+{
+  <span class="dk">"customerId"</span>: <span class="ds">"0030175738"</span>,
+  <span class="dk">"firstName"</span>: <span class="ds">"Rajesh"</span>, <span class="dk">"lastName"</span>: <span class="ds">"Kumar"</span>,
+  <span class="dk">"mobileNumber"</span>: <span class="ds">"919876543210"</span>,
+  <span class="dk">"distributor"</span>: { <span class="dk">"code"</span>: <span class="ds">"DIST001"</span>, <span class="dk">"name"</span>: <span class="ds">"PepsiCo Delhi North"</span> },
+  <span class="dk">"stores"</span>: [{ <span class="dk">"storeId"</span>: <span class="ds">"STR001"</span>, <span class="dk">"storeName"</span>: <span class="ds">"Raj Kirana Store"</span> }]
+}</div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase2 = `
+    <div class="phase-card actor-kafka">
+      <div class="phase-card-header">
+        <span class="actor-badge kafka">Kafka Consumer</span>
+        <span class="phase-title">Phase 2: Kafka Consumer Processes Message</span>
+        <span class="phase-desc">Conditional on topic config</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('code',
+            `<span class="pnode-code">CustomerMasterConsumer &#8594; CustomerStoreDataService.processConsumerData()</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">Batch processing:</span> <span class="dn">10</span> records per batch
+<span style="color:#94a3b8;">Consumer is conditional on topic config &mdash; only active when Kafka topic is configured for the country</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase3 = `
+    <div class="phase-card actor-system">
+      <div class="phase-card-header">
+        <span class="actor-badge system">System</span>
+        <span class="phase-title">Phase 3: Atomic Database Write (Transaction)</span>
+        <span class="phase-desc">All 3 operations in one TransactionTemplate</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span style="color:#94a3b8;">All 3 operations in one TransactionTemplate &mdash; rollback on any failure</span></div>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_distributors')">pepsi_distributors</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Step 1: INSERT (ON CONFLICT DO NOTHING)</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">INSERT INTO</span> pepsi_distributors
+  <span class="dk">distributor_id</span>=<span class="ds">'DIST001'</span>,
+  <span class="dk">name</span>=<span class="ds">'PepsiCo Delhi North'</span>,
+  <span class="dk">category</span>=<span class="ds">'Distributor'</span>
+  <span class="dk">ON CONFLICT DO NOTHING</span></div>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_customers')">pepsi_customers</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Step 2: UPSERT (ON CONFLICT customer_id DO UPDATE)</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">INSERT INTO</span> pepsi_customers
+  <span class="dk">customer_id</span>=<span class="ds">'0030175738'</span>,
+  <span class="dk">distributor_id</span>=<span class="ds">'DIST001'</span>,
+  <span class="dk">phone</span>=<span class="ds">'919876543210'</span>,
+  <span class="dk">data</span>=<span class="ds">{"wa_id": ["919876543210"]}</span>
+  <span class="dk">ON CONFLICT</span> customer_id <span class="dk">DO UPDATE</span></div>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_stores')">pepsi_stores</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Step 3: UPSERT (ON CONFLICT store_id DO UPDATE)</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">INSERT INTO</span> pepsi_stores
+  <span class="dk">store_id</span>=<span class="ds">'STR001'</span>,
+  <span class="dk">customer_id</span>=<span class="ds">'0030175738'</span>,
+  <span class="dk">store_type</span>=<span class="ds">'DO'</span>,
+  <span class="dk">data</span>=<span class="ds">{...}</span>, <span class="dk">address</span>=<span class="ds">{...}</span>
+  <span class="dk">ON CONFLICT</span> store_id <span class="dk">DO UPDATE</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase4 = `
+    <div class="phase-card actor-system">
+      <div class="phase-card-header">
+        <span class="actor-badge system">System</span>
+        <span class="phase-title">Phase 4: Master Data Mirror</span>
+        <span class="phase-desc">Raw SAP payload stored as-is in JSONB</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_customer_master')">pepsi_customer_master</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">.data = full CustomerMaster JSON</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_stores_master')">pepsi_stores_master</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">.data = full store JSON</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">Purpose:</span> preserves raw SAP data for future use / debugging
+<span style="color:#94a3b8;">Full SAP payload stored as JSONB &mdash; no field extraction, no transformation</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const insightBox = `
+    <div class="insight-box">
+      <span class="insight-icon">&#128273;</span>
+      <div>
+        <div class="insight-title">Key Insight</div>
+        <div class="insight-text">
+          Five tables written from a single Kafka message. The normalized tables (<code>pepsi_customers</code>,
+          <code>pepsi_stores</code>, <code>pepsi_distributors</code>) extract key fields for querying.
+          The master tables store the complete SAP payload as JSONB for audit and future field extraction.
+          All writes are atomic &mdash; if any step fails, the entire message is rolled back.
+        </div>
+      </div>
+    </div>`;
+
+  const tablesSidebar = `
+    <div class="flow-tables-sidebar">
+      <div class="flow-tables-panel">
+        <h4>Tables Used</h4>
+        <div class="flow-table-link" onclick="selectTable('pepsi_distributors')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_distributors</div>
+            <div class="ftl-usage">Write in Phase 3 (Step 1)</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_customers')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_customers</div>
+            <div class="ftl-usage">Write in Phase 3 (Step 2)</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_stores')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_stores</div>
+            <div class="ftl-usage">Write in Phase 3 (Step 3)</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_customer_master')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_customer_master</div>
+            <div class="ftl-usage">Write in Phase 4 (mirror)</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_stores_master')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_stores_master</div>
+            <div class="ftl-usage">Write in Phase 4 (mirror)</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  return `
+    <div class="flow-view active" id="flowView">
+      <div class="flow-header">
+        <div class="breadcrumb">
+          <span onclick="showWelcome()">&#8592; Back to Overview</span>
+        </div>
+        <h2>
+          Store &amp; Customer Ingestion Flow
+          <span class="flow-badge">4 Phases</span>
+        </h2>
+      </div>
+      <div class="flow-svg-container">
+        <h3>Flow Overview</h3>
+        <svg viewBox="0 0 950 370" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:900px;height:auto;">
+          <defs>
+            <marker id="siArrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#94a3b8"/></marker>
+          </defs>
+          <!-- SAP System -->
+          <rect x="370" y="10" width="160" height="40" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+          <text x="450" y="35" text-anchor="middle" font-size="13" font-weight="600" fill="#166534">SAP System</text>
+          <!-- Kafka arrow -->
+          <line x1="450" y1="50" x2="450" y2="80" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#siArrow)"/>
+          <text x="470" y="70" font-size="10" fill="#64748b">Kafka</text>
+          <!-- Consumer -->
+          <rect x="335" y="85" width="230" height="34" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+          <text x="450" y="107" text-anchor="middle" font-size="12" font-weight="600" fill="#374151">CustomerMasterConsumer</text>
+          <!-- Fan-out arrows -->
+          <line x1="380" y1="119" x2="160" y2="165" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#siArrow)"/>
+          <line x1="450" y1="119" x2="450" y2="165" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#siArrow)"/>
+          <line x1="520" y1="119" x2="740" y2="165" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#siArrow)"/>
+          <!-- Transaction boundary -->
+          <rect x="50" y="155" width="850" height="195" rx="10" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,4"/>
+          <text x="70" y="175" font-size="11" font-weight="600" fill="#64748b">Transaction</text>
+          <!-- 3 normalized tables -->
+          <rect class="flow-table-box" onclick="selectTable('pepsi_distributors')" x="60" y="185" width="190" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="155" y="205" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_distributors</text>
+          <text x="155" y="222" text-anchor="middle" font-size="10" fill="#a16207">code, name, status</text>
+          <rect class="flow-table-box" onclick="selectTable('pepsi_customers')" x="355" y="185" width="190" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="450" y="205" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_customers</text>
+          <text x="450" y="222" text-anchor="middle" font-size="10" fill="#a16207">customer_id, name, mobile</text>
+          <rect class="flow-table-box" onclick="selectTable('pepsi_stores')" x="650" y="185" width="190" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="745" y="205" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_stores</text>
+          <text x="745" y="222" text-anchor="middle" font-size="10" fill="#a16207">store_id, name, geo</text>
+          <!-- Arrows to master tables -->
+          <line x1="450" y1="233" x2="300" y2="280" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#siArrow)"/>
+          <line x1="745" y1="233" x2="700" y2="280" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#siArrow)"/>
+          <!-- Master tables -->
+          <rect class="flow-table-box" onclick="selectTable('pepsi_customer_master')" x="170" y="280" width="220" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="280" y="300" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_customer_master</text>
+          <text x="280" y="317" text-anchor="middle" font-size="10" fill="#a16207">raw JSONB mirror</text>
+          <rect class="flow-table-box" onclick="selectTable('pepsi_stores_master')" x="570" y="280" width="220" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="680" y="300" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_stores_master</text>
+          <text x="680" y="317" text-anchor="middle" font-size="10" fill="#a16207">raw JSONB mirror</text>
+          <!-- Hint -->
+          <text x="940" y="362" text-anchor="end" font-size="10" fill="#94a3b8" font-style="italic">Click any table to view details</text>
+        </svg>
+      </div>
+      <div class="flow-layout">
+        <div class="flow-timeline">
+          ${phase1}
+          ${makePhaseConnector('SAP message received by consumer')}
+          ${phase2}
+          ${makePhaseConnector('Parsed and ready for DB write')}
+          ${phase3}
+          ${makePhaseConnector('Normalized data written, now mirror raw payload')}
+          ${phase4}
+          ${insightBox}
+        </div>
+        ${tablesSidebar}
+      </div>
+    </div>`;
+}
+
+// ──────────────────────────────────────────
+// FLOW: Translations + Language
+// ──────────────────────────────────────────
+
+function renderTranslationsFlow() {
+  const phase1 = `
+    <div class="phase-card actor-admin">
+      <div class="phase-card-header">
+        <span class="actor-badge admin">Admin</span>
+        <span class="phase-title">Phase 1: Admin Uploads Translations</span>
+        <span class="phase-desc">Bulk label upload with language validation</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">POST /v1/api/translation?scope=pepsi</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">TranslationWriterController &#8594; TranslationWriterService &#8594; TranslationWriterDao</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#14532d;"><span class="dk">Request:</span>
+[{
+  <span class="dk">"label"</span>: <span class="ds">"welcome_message"</span>,
+  <span class="dk">"type"</span>: <span class="ds">"Simple text"</span>,
+  <span class="dk">"language"</span>: {
+    <span class="ds">"en"</span>: <span class="ds">"Welcome to PepsiConnect!"</span>,
+    <span class="ds">"hi"</span>: <span class="ds">"&#x092A;&#x0947;&#x092A;&#x094D;&#x0938;&#x0940; &#x0915;&#x0928;&#x0947;&#x0915;&#x094D;&#x091F; &#x092E;&#x0947;&#x0902; &#x0906;&#x092A;&#x0915;&#x093E; &#x0938;&#x094D;&#x0935;&#x093E;&#x0917;&#x0924; &#x0939;&#x0948;!"</span>
+  }
+}]</div>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_languages')">pepsi_languages</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Validation: language codes checked against this table</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_translations')">pepsi_translations</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Per label &#215; language: UPSERT (ON CONFLICT label, language_code DO UPDATE)</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_filemetadata')">pepsi_filemetadata</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Upload metadata saved (JSONB with counts, status, errors)</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">Response:</span> per-entry action: <span class="ds">"CREATED"</span> or <span class="ds">"UPDATED"</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase2 = `
+    <div class="phase-card actor-customer">
+      <div class="phase-card-header">
+        <span class="actor-badge customer">Customer</span>
+        <span class="phase-title">Phase 2: Customer Sets Language Preference</span>
+        <span class="phase-desc">User picks language in app settings</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">App &#8594; user picks</span> <span class="ds">"Hindi"</span> <span class="dk">in settings</span></div>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_customer_config')">pepsi_customer_config</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">preferences JSONB</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">Stored in</span> preferences <span class="dk">JSONB:</span>
+{
+  <span class="dk">"language"</span>: { <span class="ds">"919876543210"</span>: <span class="ds">"hi"</span> }
+}
+<span style="color:#94a3b8;">Key: wa_id &#8594; language code mapping</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase3 = `
+    <div class="phase-card actor-app">
+      <div class="phase-card-header">
+        <span class="actor-badge app">Mobile App</span>
+        <span class="phase-title">Phase 3: App Fetches Translations</span>
+        <span class="phase-desc">Read side serves labels by locale</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">GET /v1/api/translation?scope=pepsi&amp;locale=hi</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">TranslationReaderController &#8594; TranslationReaderService &#8594; TranslationReaderDao</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_translations')">pepsi_translations</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Filtered by language_code</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#0c4a6e;"><span class="dk">Response:</span>
+{
+  <span class="dk">"IND.welcome_message"</span>: { <span class="ds">"hi"</span>: <span class="ds">"&#x092A;&#x0947;&#x092A;&#x094D;&#x0938;&#x0940; &#x0915;&#x0928;&#x0947;&#x0915;&#x094D;&#x091F; &#x092E;&#x0947;&#x0902; &#x0906;&#x092A;&#x0915;&#x093E; &#x0938;&#x094D;&#x0935;&#x093E;&#x0917;&#x0924; &#x0939;&#x0948;!"</span> },
+  <span class="dk">"IND.your_rewards_pending"</span>: { <span class="ds">"hi"</span>: <span class="ds">"&#x0932;&#x0902;&#x092C;&#x093F;&#x0924;"</span> }
+}
+<span style="color:#94a3b8;">App renders all UI labels in customer's preferred language</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase4 = `
+    <div class="phase-card actor-app">
+      <div class="phase-card-header">
+        <span class="actor-badge app">Mobile App</span>
+        <span class="phase-title">Phase 4: Language Preference Lookup</span>
+        <span class="phase-desc">Find customer's preferred language by wa_id</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">GET /v1/api/customers/language-preference?waId=919876543210&amp;scope=pepsi</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">CustomerReaderController &#8594; CustomerReaderService &#8594; CustomerReaderDao</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">SQL joins:</span>
+<span style="color:#94a3b8;">1.</span> <span class="pnode-table" onclick="selectTable('pepsi_customers')" style="font-size:12px;padding:3px 10px;">pepsi_customers</span> <span style="color:#94a3b8;">&mdash; finds customer by wa_id in data JSONB</span>
+<span style="color:#94a3b8;">2.</span> <span class="pnode-table" onclick="selectTable('pepsi_customer_config')" style="font-size:12px;padding:3px 10px;">pepsi_customer_config</span> <span style="color:#94a3b8;">&mdash; reads preferences JSONB path language.{waId}</span></div>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#0c4a6e;"><span class="dk">Response:</span>
+{ <span class="dk">"language"</span>: <span class="ds">"hi"</span> }</div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const insightBox = `
+    <div class="insight-box">
+      <span class="insight-icon">&#128273;</span>
+      <div>
+        <div class="insight-title">Key Insight</div>
+        <div class="insight-text">
+          Translations and language preference are connected through the customer's wa_id.
+          The preference (stored in <code>pepsi_customer_config</code> JSONB) tells the app which locale to request.
+          The translations table stores labels indexed by language_code. The <code>pepsi_languages</code> table acts as a
+          reference/validation layer &mdash; translation uploads fail if the language code doesn't exist in <code>pepsi_languages</code>.
+        </div>
+      </div>
+    </div>`;
+
+  const tablesSidebar = `
+    <div class="flow-tables-sidebar">
+      <div class="flow-tables-panel">
+        <h4>Tables Used</h4>
+        <div class="flow-table-link" onclick="selectTable('pepsi_translations')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_translations</div>
+            <div class="ftl-usage">Write in Phase 1, Read in Phase 3</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_languages')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_languages</div>
+            <div class="ftl-usage">Read in Phase 1 (validation)</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_customer_config')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_customer_config</div>
+            <div class="ftl-usage">Write in Phase 2, Read in Phase 4</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_customers')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_customers</div>
+            <div class="ftl-usage">Read in Phase 4 (wa_id lookup)</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_filemetadata')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_filemetadata</div>
+            <div class="ftl-usage">Write in Phase 1 (upload tracking)</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  return `
+    <div class="flow-view active" id="flowView">
+      <div class="flow-header">
+        <div class="breadcrumb">
+          <span onclick="showWelcome()">&#8592; Back to Overview</span>
+        </div>
+        <h2>
+          Translations + Language Flow
+          <span class="flow-badge">4 Phases</span>
+        </h2>
+      </div>
+      <div class="flow-svg-container">
+        <h3>Flow Overview</h3>
+        <svg viewBox="0 0 950 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:900px;height:auto;">
+          <defs>
+            <marker id="tlArrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#94a3b8"/></marker>
+          </defs>
+          <!-- Admin UI -->
+          <rect x="20" y="30" width="120" height="40" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+          <text x="80" y="55" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">Admin UI</text>
+          <!-- API pill -->
+          <rect x="180" y="38" width="190" height="24" rx="12" fill="#3b82f6"/>
+          <text x="275" y="55" text-anchor="middle" font-size="11" font-weight="600" fill="white">POST /translation</text>
+          <line x1="140" y1="50" x2="180" y2="50" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#tlArrow)"/>
+          <!-- pepsi_translations -->
+          <line x1="370" y1="50" x2="430" y2="50" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#tlArrow)"/>
+          <rect class="flow-table-box" onclick="selectTable('pepsi_translations')" x="430" y="25" width="200" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="530" y="45" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_translations</text>
+          <text x="530" y="62" text-anchor="middle" font-size="10" fill="#a16207">label, language_code, value</text>
+          <!-- pepsi_languages validates -->
+          <rect class="flow-table-box" onclick="selectTable('pepsi_languages')" x="720" y="25" width="190" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="815" y="45" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_languages</text>
+          <text x="815" y="62" text-anchor="middle" font-size="10" fill="#a16207">code, name, active</text>
+          <line x1="720" y1="49" x2="630" y2="49" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#tlArrow)"/>
+          <text x="655" y="42" font-size="10" fill="#64748b">validates</text>
+          <!-- Arrow down: labels available -->
+          <line x1="530" y1="73" x2="530" y2="120" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#tlArrow)"/>
+          <text x="545" y="100" font-size="10" fill="#64748b">labels available</text>
+          <!-- Mobile App -->
+          <rect x="470" y="125" width="120" height="40" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+          <text x="530" y="150" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">Mobile App</text>
+          <!-- Left: sets language -->
+          <line x1="470" y1="155" x2="310" y2="210" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#tlArrow)"/>
+          <text x="360" y="175" font-size="10" fill="#64748b">sets language</text>
+          <!-- Right: fetches locale -->
+          <line x1="590" y1="155" x2="700" y2="210" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#tlArrow)"/>
+          <text x="620" y="175" font-size="10" fill="#64748b">fetches locale=hi</text>
+          <!-- pepsi_customer_config -->
+          <rect class="flow-table-box" onclick="selectTable('pepsi_customer_config')" x="130" y="210" width="230" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="245" y="230" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_customer_config</text>
+          <text x="245" y="247" text-anchor="middle" font-size="10" fill="#a16207">preferences JSONB: {language: "hi"}</text>
+          <!-- fetch translations from translations table -->
+          <rect x="630" y="210" width="200" height="24" rx="12" fill="#3b82f6"/>
+          <text x="730" y="227" text-anchor="middle" font-size="11" font-weight="600" fill="white">GET /translation?locale=hi</text>
+          <line x1="830" y1="222" x2="870" y2="160" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3"/>
+          <!-- Dotted line: pepsi_customers to pepsi_customer_config -->
+          <rect class="flow-table-box" onclick="selectTable('pepsi_customers')" x="130" y="280" width="230" height="40" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4,3" style="cursor:pointer"/>
+          <text x="245" y="305" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_customers</text>
+          <line x1="245" y1="280" x2="245" y2="258" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="255" y="275" font-size="9" fill="#94a3b8">wa_id lookup</text>
+          <!-- Hint -->
+          <text x="940" y="332" text-anchor="end" font-size="10" fill="#94a3b8" font-style="italic">Click any table to view details</text>
+        </svg>
+      </div>
+      <div class="flow-layout">
+        <div class="flow-timeline">
+          ${phase1}
+          ${makePhaseConnector('Labels available in pepsi_translations')}
+          ${phase2}
+          ${makePhaseConnector('Preference stored, app reads on next launch')}
+          ${phase3}
+          ${makePhaseConnector('App uses language code to fetch correct translations')}
+          ${phase4}
+          ${insightBox}
+        </div>
+        ${tablesSidebar}
+      </div>
+    </div>`;
+}
+
+// ──────────────────────────────────────────
+// FLOW: Segment Assignment
+// ──────────────────────────────────────────
+
+function renderSegmentsFlow() {
+  const phase1 = `
+    <div class="phase-card actor-pace">
+      <div class="phase-card-header">
+        <span class="actor-badge pace">PACE System</span>
+        <span class="phase-title">Phase 1: Segments Arrive via Kafka (India)</span>
+        <span class="phase-desc">PACE pushes segment assignments</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">Kafka Topic: ADAPTER.OUTPUT.B2B.INDIA.PROMOSEGMENTS</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">SegmentConsumer &#8594; SegmentIngestionService</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#14532d;"><span class="dk">Payload:</span>
+{
+  <span class="dk">"segmentId"</span>: <span class="ds">"SEG001"</span>,
+  <span class="dk">"segmentName"</span>: <span class="ds">"North India Premium"</span>,
+  <span class="dk">"customerUIds"</span>: [<span class="ds">"STR001"</span>, <span class="ds">"STR002"</span>, <span class="ds">"STR003"</span>]
+}</div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase2 = `
+    <div class="phase-card actor-system">
+      <div class="phase-card-header">
+        <span class="actor-badge system">System</span>
+        <span class="phase-title">Phase 2: 4-Step Atomic Write (Transaction)</span>
+        <span class="phase-desc">Full-replace strategy for segment assignments</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span style="color:#94a3b8;">All 4 operations in one TransactionTemplate &mdash; rollback on any failure</span></div>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_folder')">pepsi_folder</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Step 1: Ensure folder (folder_id="kafka-imports", ON CONFLICT DO NOTHING)</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_segment')">pepsi_segment</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Step 2: Upsert segment (source="PACE", status="PUBLISHED", ON CONFLICT DO UPDATE)</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span style="color:#94a3b8;">Step 3:</span> <span class="dk">DELETE FROM</span> <span class="pnode-table" onclick="selectTable('pepsi_store_segments')" style="font-size:12px;padding:3px 10px;">pepsi_store_segments</span> <span class="dk">WHERE</span> segment_id = <span class="ds">:segmentId</span>
+<span style="color:#94a3b8;">Clear all old assignments for this segment</span></div>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_store_segments')">pepsi_store_segments</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Step 4: INSERT for each customerUId</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">INSERT INTO</span> pepsi_store_segments
+  <span class="dk">for each</span> customerUId <span class="dk">in</span> payload
+  <span style="color:#94a3b8;">Only if store exists in</span> <span class="pnode-table" onclick="selectTable('pepsi_stores')" style="font-size:12px;padding:3px 10px;">pepsi_stores</span>
+<span style="color:#fbbf24;">&#9888; Stores not found in pepsi_stores are skipped with a warning &mdash; no transaction failure</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase3 = `
+    <div class="phase-card actor-admin">
+      <div class="phase-card-header">
+        <span class="actor-badge admin">Admin</span>
+        <span class="phase-title">Phase 3: Admin Creates Segments (Mexico)</span>
+        <span class="phase-desc">REST API for manual segment management</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">POST /v1/api/segment-writer/segments?scope=pepsi</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">SegmentWriterController &#8594; SegmentWriterService &#8594; SegmentWriterDao</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_segment')">pepsi_segment</span>`
+          )}
+          ${makePipelineStep('api',
+            `<span class="pnode-api">PUT /v1/api/segment-writer/store-segments/replace</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_store_segments')">pepsi_store_segments</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Delete all for store, insert new</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span style="color:#94a3b8;">Same tables, different entry point &mdash; Kafka for India, REST for Mexico</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase4 = `
+    <div class="phase-card actor-app">
+      <div class="phase-card-header">
+        <span class="actor-badge app">Mobile App</span>
+        <span class="phase-title">Phase 4: App/Admin Reads Segments</span>
+        <span class="phase-desc">Query segments and store assignments</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">GET /v1/api/segments/search?scope=pepsi</span>`
+          )}
+          ${makePipelineStep('api',
+            `<span class="pnode-api">GET /v1/api/stores/{storeId}/segments</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">SegmentReaderController &#8594; SegmentReaderService &#8594; SegmentReaderDao</span>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_segment')">pepsi_segment</span>
+             <span style="font-size:12px;color:#64748b;margin-left:4px;">and</span>
+             <span class="pnode-table" onclick="selectTable('pepsi_store_segments')" style="margin-left:4px;">pepsi_store_segments</span>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const insightBox = `
+    <div class="insight-box">
+      <span class="insight-icon">&#128273;</span>
+      <div>
+        <div class="insight-title">Key Insight</div>
+        <div class="insight-text">
+          India and Mexico use the same tables but different write paths. India's PACE system pushes segments via Kafka
+          with a full-replace strategy (delete all old assignments, insert new). Mexico's Admin UI uses REST APIs for manual
+          segment management. The 4-step Kafka transaction ensures atomicity &mdash; folder creation, segment upsert,
+          old assignment cleanup, and new assignment insertion all succeed or fail together. Store existence is validated
+          via FK check against <code>pepsi_stores</code>.
+        </div>
+      </div>
+    </div>`;
+
+  const tablesSidebar = `
+    <div class="flow-tables-sidebar">
+      <div class="flow-tables-panel">
+        <h4>Tables Used</h4>
+        <div class="flow-table-link" onclick="selectTable('pepsi_folder')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_folder</div>
+            <div class="ftl-usage">Write in Phase 2 (Step 1)</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_segment')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_segment</div>
+            <div class="ftl-usage">Write in Phase 2 &amp; 3, Read in Phase 4</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_store_segments')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_store_segments</div>
+            <div class="ftl-usage">Write in Phase 2 &amp; 3, Read in Phase 4</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_stores')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_stores</div>
+            <div class="ftl-usage">Read in Phase 2 (FK validation)</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  return `
+    <div class="flow-view active" id="flowView">
+      <div class="flow-header">
+        <div class="breadcrumb">
+          <span onclick="showWelcome()">&#8592; Back to Overview</span>
+        </div>
+        <h2>
+          Segment Assignment Flow
+          <span class="flow-badge">4 Phases</span>
+        </h2>
+      </div>
+      <div class="flow-svg-container">
+        <h3>Flow Overview</h3>
+        <svg viewBox="0 0 950 370" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:900px;height:auto;">
+          <defs>
+            <marker id="sgArrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#94a3b8"/></marker>
+          </defs>
+          <!-- PACE System (India path) -->
+          <rect x="20" y="20" width="150" height="40" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+          <text x="95" y="45" text-anchor="middle" font-size="13" font-weight="600" fill="#166534">PACE System</text>
+          <text x="95" y="72" text-anchor="middle" font-size="10" fill="#64748b">(India)</text>
+          <rect x="210" y="28" width="110" height="24" rx="12" fill="#3b82f6"/>
+          <text x="265" y="45" text-anchor="middle" font-size="11" font-weight="600" fill="white">Kafka</text>
+          <line x1="170" y1="40" x2="210" y2="40" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#sgArrow)"/>
+          <!-- SegmentConsumer -->
+          <rect x="360" y="20" width="200" height="34" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+          <text x="460" y="42" text-anchor="middle" font-size="12" font-weight="600" fill="#374151">SegmentConsumer</text>
+          <line x1="320" y1="40" x2="360" y2="40" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#sgArrow)"/>
+          <line x1="460" y1="54" x2="460" y2="110" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#sgArrow)"/>
+          <!-- Admin UI (Mexico path) -->
+          <rect x="20" y="90" width="150" height="40" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+          <text x="95" y="115" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">Admin UI</text>
+          <text x="95" y="142" text-anchor="middle" font-size="10" fill="#64748b">(Mexico)</text>
+          <rect x="210" y="98" width="110" height="24" rx="12" fill="#3b82f6"/>
+          <text x="265" y="115" text-anchor="middle" font-size="11" font-weight="600" fill="white">REST API</text>
+          <line x1="170" y1="110" x2="210" y2="110" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#sgArrow)"/>
+          <!-- Writer API -->
+          <rect x="360" y="90" width="200" height="34" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+          <text x="460" y="112" text-anchor="middle" font-size="12" font-weight="600" fill="#374151">Writer API</text>
+          <line x1="320" y1="110" x2="360" y2="110" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#sgArrow)"/>
+          <line x1="460" y1="124" x2="460" y2="110" stroke="transparent"/>
+          <!-- Transaction boundary -->
+          <rect x="180" y="120" width="590" height="150" rx="10" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,4"/>
+          <text x="200" y="140" font-size="11" font-weight="600" fill="#64748b">Transaction</text>
+          <!-- Tables inside transaction -->
+          <rect class="flow-table-box" onclick="selectTable('pepsi_folder')" x="200" y="150" width="160" height="42" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="280" y="175" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_folder</text>
+          <rect class="flow-table-box" onclick="selectTable('pepsi_segment')" x="390" y="150" width="170" height="42" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="475" y="175" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_segment</text>
+          <rect class="flow-table-box" onclick="selectTable('pepsi_store_segments')" x="200" y="210" width="190" height="42" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="295" y="235" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_store_segments</text>
+          <!-- pepsi_stores (validates) -->
+          <rect class="flow-table-box" onclick="selectTable('pepsi_stores')" x="500" y="210" width="160" height="42" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="580" y="235" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_stores</text>
+          <line x1="390" y1="231" x2="500" y2="231" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="445" y="224" font-size="9" fill="#94a3b8">validates</text>
+          <!-- Read APIs -->
+          <line x1="400" y1="270" x2="400" y2="310" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#sgArrow)"/>
+          <rect x="280" y="310" width="200" height="24" rx="12" fill="#3b82f6"/>
+          <text x="380" y="327" text-anchor="middle" font-size="11" font-weight="600" fill="white">GET /segments/search</text>
+          <rect x="520" y="310" width="230" height="24" rx="12" fill="#3b82f6"/>
+          <text x="635" y="327" text-anchor="middle" font-size="11" font-weight="600" fill="white">GET /stores/{id}/segments</text>
+          <!-- Hint -->
+          <text x="940" y="362" text-anchor="end" font-size="10" fill="#94a3b8" font-style="italic">Click any table to view details</text>
+        </svg>
+      </div>
+      <div class="flow-layout">
+        <div class="flow-timeline">
+          ${phase1}
+          ${makePhaseConnector('Kafka message parsed, ready for atomic write')}
+          ${phase2}
+          ${makePhaseConnector('India: segments written via Kafka')}
+          ${phase3}
+          ${makePhaseConnector('Mexico: segments written via REST')}
+          ${phase4}
+          ${insightBox}
+        </div>
+        ${tablesSidebar}
+      </div>
+    </div>`;
+}
+
+// ──────────────────────────────────────────
+// FLOW: WhatsApp Metadata
+// ──────────────────────────────────────────
+
+function renderWhatsappMetadataFlow() {
+  const phase1 = `
+    <div class="phase-card actor-bot">
+      <div class="phase-card-header">
+        <span class="actor-badge bot">WhatsApp Bot</span>
+        <span class="phase-title">Phase 1: WhatsApp Bot Stores Metadata</span>
+        <span class="phase-desc">India only, JWT-protected</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">POST /v1/api/metadata/save?scope=pepsi</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Auth: Bearer JWT (protected)</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">MetadataWriterController &#8594; MetadataWriterService &#8594; MetadataWriterDao</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#14532d;"><span class="dk">Request:</span>
+{
+  <span class="dk">"customerId"</span>: <span class="ds">"CUST001"</span>,
+  <span class="dk">"waId"</span>: <span class="ds">"919876543210"</span>,
+  <span class="dk">"metadata"</span>: {
+    <span class="dk">"channel"</span>: <span class="ds">"whatsapp"</span>,
+    <span class="dk">"bot_version"</span>: <span class="ds">"2.1"</span>,
+    <span class="dk">"last_interaction"</span>: <span class="ds">"2026-04-03T10:00:00Z"</span>
+  }
+}</div>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_web_metadata')">pepsi_web_metadata</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">UPSERT (ON CONFLICT customer_id, wa_id DO UPDATE)</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span style="color:#94a3b8;">India only: gated by allowed-countries config</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase2 = `
+    <div class="phase-card actor-app">
+      <div class="phase-card-header">
+        <span class="actor-badge app">Mobile App</span>
+        <span class="phase-title">Phase 2: App/Service Reads Metadata</span>
+        <span class="phase-desc">Public endpoint, no JWT required</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('api',
+            `<span class="pnode-api">POST /v1/api/metadata/get?scope=pepsi</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">Auth: PUBLIC (uses siteId header for country)</span>`
+          )}
+          ${makePipelineStep('code',
+            `<span class="pnode-code">MetadataReaderController &#8594; MetadataReaderService &#8594; MetadataReaderDao</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#14532d;"><span class="dk">Request:</span>
+{ <span class="dk">"customerId"</span>: <span class="ds">"CUST001"</span>, <span class="dk">"waId"</span>: <span class="ds">"919876543210"</span> }</div>`
+          )}
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_web_metadata')">pepsi_web_metadata</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">SELECT WHERE customer_id AND wa_id</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data" style="background:#0c4a6e;"><span class="dk">Response:</span> metadata JSONB
+{
+  <span class="dk">"channel"</span>: <span class="ds">"whatsapp"</span>,
+  <span class="dk">"bot_version"</span>: <span class="ds">"2.1"</span>,
+  <span class="dk">"last_interaction"</span>: <span class="ds">"2026-04-03T10:00:00Z"</span>
+}</div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const phase3 = `
+    <div class="phase-card actor-system">
+      <div class="phase-card-header">
+        <span class="actor-badge system">System</span>
+        <span class="phase-title">Phase 3: Customer Lookup by WhatsApp ID</span>
+        <span class="phase-desc">Logical link between metadata and customer</span>
+      </div>
+      <div class="phase-card-body">
+        <div class="pipeline">
+          ${makePipelineStep('table',
+            `<span class="pnode-table" onclick="selectTable('pepsi_customers')">pepsi_customers</span>
+             <span style="font-size:12px;color:#64748b;margin-left:8px;">.data-&gt;'wa_id' GIN index &mdash; find customer by WhatsApp number</span>`
+          )}
+          ${makePipelineStep('data',
+            `<div class="pnode-data"><span class="dk">Connection:</span> customer_id links
+  <span class="pnode-table" onclick="selectTable('pepsi_web_metadata')" style="font-size:12px;padding:3px 10px;">pepsi_web_metadata</span> &#8594;
+  <span class="pnode-table" onclick="selectTable('pepsi_customers')" style="font-size:12px;padding:3px 10px;">pepsi_customers</span>
+<span style="color:#94a3b8;">Logical relationship &mdash; no FK constraint</span>
+<span style="color:#94a3b8;">The web_metadata table stores extended metadata per wa_id</span></div>`
+          )}
+        </div>
+      </div>
+    </div>`;
+
+  const insightBox = `
+    <div class="insight-box">
+      <span class="insight-icon">&#128273;</span>
+      <div>
+        <div class="insight-title">Key Insight</div>
+        <div class="insight-text">
+          <code>pepsi_web_metadata</code> stores WhatsApp-specific data per customer per wa_id.
+          The write endpoint is JWT-protected (only the WhatsApp Bot can store metadata), while the read endpoint
+          is public (uses siteId header instead of JWT). One customer can have multiple wa_ids, each with its own
+          metadata record. The customer_id links this table to <code>pepsi_customers</code>, but there's no FK &mdash;
+          it's a logical relationship. India is the only market using this table currently.
+        </div>
+      </div>
+    </div>`;
+
+  const tablesSidebar = `
+    <div class="flow-tables-sidebar">
+      <div class="flow-tables-panel">
+        <h4>Tables Used</h4>
+        <div class="flow-table-link" onclick="selectTable('pepsi_web_metadata')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_web_metadata</div>
+            <div class="ftl-usage">Write in Phase 1, Read in Phase 2</div>
+          </div>
+        </div>
+        <div class="flow-table-link" onclick="selectTable('pepsi_customers')">
+          <span class="ftl-icon">&#9638;</span>
+          <div>
+            <div class="ftl-name">pepsi_customers</div>
+            <div class="ftl-usage">Read in Phase 3 (wa_id lookup)</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  return `
+    <div class="flow-view active" id="flowView">
+      <div class="flow-header">
+        <div class="breadcrumb">
+          <span onclick="showWelcome()">&#8592; Back to Overview</span>
+        </div>
+        <h2>
+          WhatsApp Metadata Flow
+          <span class="flow-badge">3 Phases</span>
+        </h2>
+      </div>
+      <div class="flow-svg-container">
+        <h3>Flow Overview</h3>
+        <svg viewBox="0 0 950 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:900px;height:auto;">
+          <defs>
+            <marker id="wmArrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#94a3b8"/></marker>
+          </defs>
+          <!-- WhatsApp Bot (left) -->
+          <rect x="20" y="30" width="140" height="40" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+          <text x="90" y="55" text-anchor="middle" font-size="13" font-weight="600" fill="#166534">WhatsApp Bot</text>
+          <!-- POST metadata/save pill (JWT) -->
+          <rect x="190" y="25" width="220" height="24" rx="12" fill="#3b82f6"/>
+          <text x="300" y="42" text-anchor="middle" font-size="11" font-weight="600" fill="white">POST /metadata/save (JWT)</text>
+          <line x1="160" y1="45" x2="190" y2="40" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#wmArrow)"/>
+          <!-- Auth highlight -->
+          <rect x="200" y="52" width="70" height="18" rx="9" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+          <text x="235" y="64" text-anchor="middle" font-size="9" font-weight="600" fill="#92400e">write=JWT</text>
+          <!-- pepsi_web_metadata (center) -->
+          <line x1="410" y1="37" x2="440" y2="50" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#wmArrow)"/>
+          <rect class="flow-table-box" onclick="selectTable('pepsi_web_metadata')" x="440" y="25" width="220" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="550" y="45" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_web_metadata</text>
+          <text x="550" y="62" text-anchor="middle" font-size="10" fill="#a16207">customer_id, wa_id, metadata JSONB</text>
+          <!-- Mobile App (right) -->
+          <rect x="790" y="30" width="130" height="40" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+          <text x="855" y="55" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">Mobile App</text>
+          <!-- POST metadata/get pill (Public) -->
+          <rect x="690" y="80" width="230" height="24" rx="12" fill="#3b82f6"/>
+          <text x="805" y="97" text-anchor="middle" font-size="11" font-weight="600" fill="white">POST /metadata/get (Public)</text>
+          <line x1="855" y1="70" x2="830" y2="80" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#wmArrow)"/>
+          <line x1="690" y1="92" x2="660" y2="65" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#wmArrow)"/>
+          <!-- Auth highlight -->
+          <rect x="700" y="108" width="80" height="18" rx="9" fill="#dcfce7" stroke="#22c55e" stroke-width="1"/>
+          <text x="740" y="120" text-anchor="middle" font-size="9" font-weight="600" fill="#166534">read=Public</text>
+          <!-- Arrow down to pepsi_customers -->
+          <line x1="550" y1="73" x2="550" y2="140" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#wmArrow)"/>
+          <text x="565" y="110" font-size="10" fill="#94a3b8">customer_id link (logical)</text>
+          <!-- pepsi_customers -->
+          <rect class="flow-table-box" onclick="selectTable('pepsi_customers')" x="440" y="145" width="220" height="48" rx="8" fill="#fefce8" stroke="#f59e0b" stroke-width="1.5" style="cursor:pointer"/>
+          <text x="550" y="165" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">pepsi_customers</text>
+          <text x="550" y="182" text-anchor="middle" font-size="10" fill="#a16207">data->'wa_id' (GIN index)</text>
+          <!-- Hint -->
+          <text x="940" y="220" text-anchor="end" font-size="10" fill="#94a3b8" font-style="italic">Click any table to view details</text>
+        </svg>
+      </div>
+      <div class="flow-layout">
+        <div class="flow-timeline">
+          ${phase1}
+          ${makePhaseConnector('Metadata stored in pepsi_web_metadata')}
+          ${phase2}
+          ${makePhaseConnector('customer_id links metadata to customer record')}
+          ${phase3}
+          ${insightBox}
+        </div>
+        ${tablesSidebar}
+      </div>
+    </div>`;
+}
+
+// ──────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────
+renderTree();
+document.getElementById('mainContent').innerHTML = renderWelcome();
+</script>
+</body>
+</html>

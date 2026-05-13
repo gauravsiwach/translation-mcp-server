@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+     "translation-mcp-server-stdio": {
+      "args": [
+        "/Users/gaurav.siwach/Work/Gaurav/translation-mcp-server/src/mcp/server.py"
+      ],
+      "command": "/Users/gaurav.siwach/Work/Gaurav/translation-mcp-server/.venv/bin/python",
+      "disabled": false
+    },
+    "translation-mcp-server-sse": {
+      "url": "http://localhost:8001/see"  
+    }
+  }
+}
