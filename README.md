@@ -91,6 +91,8 @@ This service is a **centralized translation backend** that tackles the problem o
 
 ## Quick Start
 
+> For the full developer setup guide (venv, migrations, MCP server, DB UI, Ollama): see **[docs/HELP_COMMANDS.md](docs/HELP_COMMANDS.md)**
+
 ### Option 1 — Docker Compose (recommended)
 
 Starts PostgreSQL and the API server together.

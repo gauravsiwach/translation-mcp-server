@@ -1,91 +1,84 @@
 # Helper Commands — Translation MCP Server
 
-Quick commands to set up the environment, run the app, and run tests.
+---
 
-## Check Python
-```bash
-python3 --version
-which python3
-python3 -c "import sys; print('.'.join(map(str, sys.version_info[:3])))"
-```
+## Step 1 — Set Up Virtual Environment (first time only)
 
-## Create and activate virtualenv (macOS / Linux)
 ```bash
+# 1. Create the virtual environment
 python3.11 -m venv .venv
+
+# 2. Activate it
 source .venv/bin/activate
-```
 
-## Deactivate virtualenv
-```bash
-deactivate
-```
-
-## Install dependencies
-Option A — recommended (bootstrap script):
-```bash
+# 3. Install all dependencies
 ./scripts/bootstrap.sh
-source .venv/bin/activate
 ```
 
-Option B — manual install:
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-pip freeze > requirements.txt
-```
+> Every time you open a new terminal, just run step 2 (`source .venv/bin/activate`) before anything else.
 
-## Run the FastAPI app (local)
-Requires DB running (use Docker Compose or local Postgres).
+---
+
+## Step 2 — Run Migrations (first time or after model changes)
 
 ```bash
+# Generate a new migration file from model changes
+alembic revision --autogenerate -m "description of change"
 
-# start app from root folder
-uvicorn main:app --app-dir src --reload --host 0.0.0.0 --port 8000
-
-# or (use docker-compose to run DB + app)
-docker-compose up --build
-```
-
-## Run tests
-```bash
-pytest -q
-```
-
-## Alembic migrations
-```bash
-# generate first migration after models are stable
-alembic revision --autogenerate -m "initial"
-# apply migrations
+# Apply all pending migrations to the DB
 alembic upgrade head
 ```
 
-## Check outdated packages
+---
+
+## Step 3 — Start the FastAPI App
+
+> Make sure DB is running before this step (see Step 5 for DB options).
+> Ensure `DB_URL` is set in `.env`.
+
 ```bash
-pip list --outdated --format=columns
+# Start the API server (hot-reload enabled)
+uvicorn main:app --app-dir src --reload --host 0.0.0.0 --port 8000
+
+# Alternative: start app + DB together via Docker
+docker-compose up --build
 ```
 
-## Helpful notes
-- Use `docker-compose` if you don't have a local Postgres available.
-- Ensure `DB_URL` is set in `.env` or environment before running the app.
-- If you change dependencies, regenerate `requirements.txt` with:
+---
+
+## Step 4 — Start the MCP Server
+
+> The MCP server runs separately from the FastAPI app on port 8001 (SSE transport).
+
 ```bash
-pip freeze | sed '/^-e /d' > requirements.txt
+# Run the MCP server (from project root, with venv active)
+python -m src.mcp.server
 ```
 
-## Inspect DB via pgweb
+> Logs are written to `src/mcp/mcp.log`. Check there if tools are not loading.
 
-If you have `pgweb` installed you can launch a lightweight web UI for Postgres:
+---
 
+## Step 5 — Connect to the Database (pgweb UI)
+
+**Local Postgres:**
 ```bash
 PGPASSWORD=admin pgweb --host=localhost --port=5432 --user=postgres --db=postgres
 ```
 
-## Start Ollama (local model)
+**Docker / Podman Postgres:**
+```bash
+PGPASSWORD=postgres pgweb --host=127.0.0.1 --port=5433 --user=postgres --db=translations
+```
 
-If you have Ollama installed locally, run a model instance (serves HTTP API on port 11434):
+> Open `http://localhost:8081` in your browser after running either command.
+
+---
+
+## Step 6 — Start Ollama (Local AI Model)
 
 ```bash
-# start the Gemma model on the local Ollama runtime
+# Start the Gemma model — serves on http://localhost:11434
 ollama run gemma3:4b
 ```
 
