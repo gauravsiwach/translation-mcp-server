@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     AI_MODEL: Optional[str] = None
     OPENAI_TIMEOUT: Optional[int] = None
     OLLAMA_URL: Optional[str] = None
+    FIGMA_ACCESS_TOKEN: Optional[str] = None
 
     model_config = {
         "env_file": ENV_FILE,

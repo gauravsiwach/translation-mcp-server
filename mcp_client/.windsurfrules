@@ -42,6 +42,7 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 > 5. **Update a translation** — modify value, context, or metadata of an existing entry
 > 6. **Approve a translation** — mark a translation as approved
 > 7. **Reject a translation** — reject with optional corrected value
+> 8. **Sync Figma designs** — link translation keys to Figma screen designs and fetch screenshots for BA visual review
 >
 > What would you like to do?"
 
@@ -52,8 +53,11 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 > 3. **Update a translation** — modify value, context, or metadata of an existing entry
 > 4. **Approve a translation** — mark a translation as approved
 > 5. **Reject a translation** — reject with optional corrected value
+> 6. **Sync Figma designs** — link translation keys to Figma screen designs and fetch screenshots for BA visual review
 >
 > What would you like to do?"
+
+> **IMPORTANT:** When listing Tool mode capabilities, always show all 6 items including item 6 (Sync Figma designs). Never truncate or summarise the list.
 
 ---
 
@@ -70,6 +74,10 @@ Users often describe what they want in plain language. **Before asking for param
 | "cancel in settings" | `settings.cancel` |
 | "home label in nav" | `nav.home` |
 | "pay now button" (no screen context) | Ask: *"Which screen or section does this belong to? (e.g. profile, nav, checkout)"* |
+| "sync figma for basket" / "link basket to figma" | Config Resolution Guard → Figma sync workflow |
+| "show figma info for basket.title" | `get_figma_info_tool(key="basket.title")` |
+<!-- [DISABLED - POC: manual JSON edit only] | "register basket screen in figma" | `register_figma_screen` flow | -->
+| "what figma node is basket.title" | `get_figma_info_tool(key="basket.title")` |
 
 **Rules:**
 - Combine screen + key name with a dot: `{screen}.{key_name}`
@@ -122,6 +130,7 @@ Before confirming, validate ALL inputs against these rules:
 | `translation_id` | Positive integer | `"abc"`, `0`, `-1` | `1`, `42` |
 | Batch size | Max 50 items per call | 51 items | ≤ 50 items |
 | Duplicates | No same `key + market_code` twice in one batch | two rows with `nav.home + IN` | each key+market unique |
+| `screen_id` | Lowercase, no spaces; if not in `figma_screens.json` → trigger Config Resolution Guard, do NOT fail hard | `"Basket Screen"` | `"basket"` |
 
 If any validation fails → tell the user **exactly** what's wrong and ask them to correct it. Do NOT proceed with invalid data.
 
@@ -146,10 +155,21 @@ After showing results, ask:
 
 ## Two-Step Translation Flow (prepare → translate → save)
 
-When the user wants option **4 — Translate keys**, follow this exact flow:
+**In Tool mode, ANY request to add or create translation key(s) MUST follow this exact flow — regardless of how the user phrases it** ("add key", "create key", "lets add", "translate this", "add key X on Y screen", etc.).
+Do NOT call `save_translations` or `prepare_translations` directly outside this flow.
+If mode has not been selected yet and the user asks to add a key → ask for mode first, WAIT for answer, then proceed.
 
 ### Step A — Collect, check existence, then prepare
-1. Collect items from the user. Minimum required per item: `key`, `market_code`, `default_text`. Optional: `context`.
+1. Collect items from the user. Minimum required per item: `key`, `market_code`, `default_text`. Optional: `context`, `figma_node_id`, `figma_file_key`.
+   - If the user mentions a Figma node ID or Figma file key explicitly, capture it per key.
+   - **Always** extract `screen_id` from the key prefix (e.g. `home.flash_deal` → `screen_id = "home"`) or from user input (e.g. "add key 'abc' on Home screen" → `screen_id = "home"`).
+     Silently call in the background:
+     ```
+     get_figma_screen_config(screen_id)
+       → store figma_file_key + ALL node IDs for that screen
+     ```
+     Do NOT call any Figma MCP tool (get_metadata, get_design_context, etc.). Do NOT surface anything to the user yet.
+   - If screen config is not found for that screen_id, call `get_figma_screen_config()` (no argument) to list all available screens. Store internally.
 2. Validate all items (Step 3 rules above).
 3. **Check for existing keys** — call `get_translations` with `market_code` (and `environment`, default `DEV`) to fetch all existing keys for that market. Scan the results for any key that matches what the user wants to add.
    - **Key already exists** → STOP for that item. Show the existing value and ask:
@@ -182,39 +202,100 @@ Expected tool response:
 }
 ```
 
-### Step B — Translate and review
-1. **You** (the AI assistant) translate `default_text` into each locale in `locales`. Use `context` to produce accurate translations. give confidance score as well.
+### Step B — Figma node selection
+
+Run this BEFORE showing translations to the user.
+**Do NOT call any Figma MCP tool here.** All data comes from `get_figma_screen_config` called in Step A.
+
+**Case A — User already provided `figma_node_id` explicitly:**
+Skip. Store `{figma_file_key, figma_node_id}`. Go to Step C.
+
+**Case B — Screen config available from Step A:**
+```
+2. Build a Figma URL for EACH configured node and show the page name for context:
+   https://www.figma.com/design/{figma_file_key}?node-id={node_id}
+
+3. Show the list to the user:
+   "Here are the Figma sections configured for the `{screen_id}` screen (Figma page: **{figma_page_name}**).
+    Which one contains `{default_text}`?
+
+    1. https://www.figma.com/design/{file_key}?node-id=35773:267354
+    2. https://www.figma.com/design/{file_key}?node-id=35773:267356
+    3. https://www.figma.com/design/{file_key}?node-id=35505:113695
+    4. None of these (I'll provide a different node link)
+    5. Skip Figma linking for this key"
+
+   WAIT for user response:
+     1/2/3       → store corresponding {figma_file_key, figma_node_id} for Step D
+     4           → ask: "Paste the Figma node link or node ID:" → extract node-id from URL → store it
+     5 / skip    → store figma = null for this key
+```
+
+**Case C — No screen config found:**
+```
+Ask once: "No Figma config found for screen `{screen_id}`.
+           You can:
+           1. Paste a Figma node link directly
+           2. Skip Figma linking for this key"
+WAIT → 1 → extract node-id from URL → store it / 2 → figma = null
+```
+
+### Step C — Translation review
+
+Once Figma is resolved (or skipped), present translations for review:
+
+1. **You** (the AI assistant) translate `default_text` into each locale in `locales`. Use `context` to produce accurate translations. Give confidence score as well.
 2. Present all translations in a table:
 
-   > | # | Key | Locale | Translation |confidance|
-   > |---|-----|--------|-------------|----------|
-   > | 1 | profile.create | hi_IND | बनाएं |0.9    |
-   > | 2 | checkout.pay_now | hi_IND | अभी भुगतान करें |0.95|
-   > | 3 | nav.home | hi_IND | होम |0.93|
+   > | # | Key | Locale | Translation | Confidence |
+   > |---|-----|--------|-------------|------------|
+   > | 1 | home.flash_deal | hi_IND | फ्लैश डील! | 0.92 |
    >
    > *"Do these translations look correct? You can ask me to change any of them before saving."*
 
-3. **WAIT for user approval.** If the user wants changes, fix and redisplay the full table. Repeat until approved.
+3. **WAIT for user approval.** If the user wants changes, fix and redisplay. Repeat until approved.
 
-### Step C — Save
-1. Once approved, call `save_translations` with the confirmed translations.
+### Step D — Save everything in one go
 
-Example call to `save_translations`:
-```json
-{
-  "translations": "[{\"key\":\"profile.create\",\"market_code\":\"IN\",\"default_text\":\"Create\",\"locale_code\":\"hi_IND\",\"value\":\"बनाएं\",\"confidence\":0.9},{\"key\":\"checkout.pay_now\",\"market_code\":\"IN\",\"default_text\":\"Pay Now\",\"locale_code\":\"hi_IND\",\"value\":\"अभी भुगतान करें\",\"confidence\":0.95},{\"key\":\"nav.home\",\"market_code\":\"IN\",\"default_text\":\"Home\",\"locale_code\":\"hi_IND\",\"value\":\"होम\",\"confidence\":0.93}]",
-  "performed_by": "mcp"
-}
+Now all data is confirmed. Call both tools back to back — no more user interaction.
+
+**Before calling anything, assemble the full payload from what was stored in earlier steps:**
+```
+Per key, you must have stored:
+  - key                (from Step A)
+  - market_code        (from Step A)
+  - default_text       (from Step A)
+  - locale_code        (from prepare_translations in Step A)
+  - value              (AI translation approved in Step C)
+  - figma_file_key     (from get_figma_screen_config in Step A)
+  - figma_node_id      (from user selection in Step B — NOT null if user picked a node)
+
+If figma_node_id is null (user chose "skip") → only call save_translations, skip update_translation_figma.
+If figma_node_id is set → call BOTH tools.
 ```
 
-Expected tool response:
-```json
-{"saved": 3, "results": [{"key": "profile.create", "locale_code": "hi_IND", "translation_id": 10, "status": "created", "confidence" :0.9}, ...]}
+```
+Step i:  For keys where `figma_node_id` is set — call `get_figma_screenshot_url(figma_file_key, figma_node_id)`
+          → returns `{screenshot_url}` (no DB write). If this call fails for any key, STOP and show the error.
+
+Step ii: Assemble the full translations payload including any `figma_file_key`, `figma_node_id`, and the `figma_screenshot_url` returned in Step i. Then call `save_translations` once with the complete array:
+          key, market_code, default_text, locale_code, value, confidence=1.0, figma_file_key, figma_node_id, figma_screenshot_url
+
+If the user skipped Figma linking for a key (figma_node_id is null) → omit figma fields for that item and still include it in the single `save_translations` call.
+
+This makes a single DB write that atomically saves translations and Figma metadata.
 ```
 
-2. Show the saved count and IDs to the user.
+Show combined result:
 
-**Important:** Do NOT skip the review step. The user MUST approve translations before saving.
+| Key | Locale | Value | Figma node | Screenshot |
+|---|---|---|---|---|
+| home.flash_deal | hi_IND | फ्लैश डील! | 35773:267354 | ✅ saved |
+
+Then ask:
+> "What would you like to do next?"
+
+**Important:** User must approve translations in Step C before Step D runs. Do NOT call save_translations before Step C approval.
 
 ---
 
@@ -228,8 +309,8 @@ Use the mode the user selected at the start of the conversation:
 | **API** | "bulk add" + user says "async" / "don't wait" / "return immediately" | `add_translations_bulk_async` → offer `get_batch_status` to poll progress |
 | **API** | "bulk add" + user says "sync" / "wait for results" | `add_translations_bulk_sync` |
 | **API** | "bulk add" (no preference stated) | Ask: *"Should I wait for AI results, or return a batch ID immediately and check progress later?"* |
-| **Tool** | "translate these keys" / "add keys" | `prepare_translations` → you translate → `save_translations` |
-| **Tool** | Provides keys AND already-translated values | Still call `prepare_translations` first — check for existing keys, then save |
+| **Tool** | "add key", "create key", "lets add", "translate key(s)" — any phrasing that adds new keys | **→ Two-Step Translation Flow (section above)** — ALWAYS. Never call prepare/save directly. |
+| **Tool** | Provides keys AND already-translated values | **→ Two-Step Translation Flow** — still run Step A (existence check) before saving |
 | **Either** | List / update / approve / reject | Use the relevant tool directly |
 
 ### Handling existing keys (Tool mode)
@@ -261,9 +342,69 @@ WAIT for their answer before proceeding.
 
 ---
 
+## Figma Config Resolution Guard
+
+When the user requests anything Figma-related, run this check **before** any sync tool call:
+
+```
+1. Extract screen_id from user message
+2. Call get_figma_screen_config(screen_id)
+   FOUND     → proceed with sync flow
+   NOT FOUND → ask: "What is the Figma page name for this screen?"
+               → Search config by page_name
+                  MATCH     → proceed
+                  NO MATCH  → ask: "Do you have the section node IDs from Figma?
+                               (right-click frame → Copy link → extract node-id)
+                               Or would you like to:
+                               A) Provide node IDs now → I'll save config and sync
+                               B) Continue without Figma for now"
+```
+
+Never fail hard — always offer to collect config or skip.
+
+---
+
+## Figma Sync Workflow
+
+Step-by-step orchestration flow when user triggers Figma sync (also used inline during Step B of the translation flow).
+**No Figma MCP tools are used.** Node selection is entirely user-driven via URL list.
+
+```
+1. get_figma_screen_config(screen_id)
+   → get file_key + page_name + node_ids
+
+2. Build a Figma URL for EACH configured node:
+   https://www.figma.com/design/{file_key}?node-id={node_id}
+
+3. Show the list to the user:
+   "Here are the Figma sections for screen `{screen_id}`.
+    Open each link and pick the one that contains your text:
+
+    1. https://www.figma.com/design/{file_key}?node-id=35773:267354
+    2. https://www.figma.com/design/{file_key}?node-id=35773:267356
+    3. https://www.figma.com/design/{file_key}?node-id=35505:113695
+    4. None of these (paste a different node link)
+    5. Skip"
+
+   WAIT for user response:
+     1/2/3  → use that node_id → call update_translation_figma(key, figma_file_key, node_id)
+              → internally: Figma REST API exports node as PNG → CDN URL stored in DB
+     4      → ask for link/node ID → extract → call update_translation_figma
+     5      → leave unlinked
+
+4. Show summary table:
+   | Key             | Node selected    | Screenshot URL        |
+   |-----------------|------------------|-----------------------|
+   | home.flash_deal | 35773:267354     | https://cdn.figma...  |
+   | basket.title    | (skipped)        | —                     |
+```
+
+---
+
 ## Strict operating rules
 1. **Only use MCP tools** to perform any operation on translations. Do NOT write code, scripts, or raw SQL.
 2. **Never call a tool without user confirmation.** Always show the plan first and wait for approval.
+   **Exception — silent background reads:** `get_figma_screen_config` and `get_translations` may be called silently in Step A of the Two-Step Flow without showing a confirmation prompt. These are read-only lookups that do not modify any data.
 3. **Ask, don't assume.** If the user says "add a key" but doesn't provide the key name, market, or text — ask for each missing piece.
 4. Only the following MCP tools exist — do not claim or attempt to call any other tool:
    - `get_translations`
@@ -276,6 +417,12 @@ WAIT for their answer before proceeding.
    - `update_translation`
    - `approve_translation`
    - `reject_translation`
+   <!-- [DISABLED - POC: manual JSON edit only] - `register_figma_screen` *(Figma — any mode)* -->
+   - `get_figma_screen_config` *(Figma — any mode)*
+  - `get_figma_screen_config` *(Figma — any mode)*
+  - `get_figma_screenshot_url` *(Figma — any mode)*
+  - `update_translation_figma` *(Figma — any mode)*
+  - `get_figma_info_tool` *(Figma — any mode)*
 
    In **API mode**: do NOT call `prepare_translations` or `save_translations`.
    In **Tool mode**: do NOT call `add_translation`, `add_translations_bulk_sync`, `add_translations_bulk_async`, or `get_batch_status`.
@@ -391,6 +538,30 @@ Example:
 **When:** user wants to reject a translation.
 **Required:** `translation_id` (ask if not provided)
 **Optional:** `performed_by`, `reason`, `corrected_value`
+
+<!-- [DISABLED - POC: BA manually edits src/figma_screens.json and commits to git]
+### register_figma_screen
+**When:** BA wants to register or update a screen entry in `figma_screens.json`.
+**Required:** `screen_id` (lowercase, no spaces), `figma_file_key`, `figma_page_name`, `node_ids` (list of top-level section frame IDs)
+**Returns:** `{ screen_id, status: "saved", config: {...} }`
+-->
+
+### get_figma_screen_config
+**When:** Before any Figma sync, to read what node IDs are mapped to a screen. Also used by the Config Resolution Guard.
+**Required:** none — if `screen_id` omitted returns all screens
+**Optional:** `screen_id`
+**Returns:** config dict for the screen, or full mapping if no screen_id given
+
+### update_translation_figma
+**When:** After matching a text node to a translation key — persists the Figma node link and fetches the CDN screenshot URL into the DB for all markets.
+**Required:** `key`, `figma_file_key`, `figma_node_id`
+**Returns:** `{ key, figma_node_id, figma_screenshot_url, rows_updated }`
+
+### get_figma_info_tool
+**When:** User wants to see the Figma metadata (node ID, screenshot URL, deep link) for a translation key.
+**Required:** `key`
+**Optional:** `market_code`
+**Returns:** `{ figma_file_key, figma_node_id, figma_screenshot_url, figma_url }`
 
 ---
 

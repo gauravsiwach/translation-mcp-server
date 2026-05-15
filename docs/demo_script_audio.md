@@ -1,0 +1,160 @@
+_________________________________________________________________________
+
+                            Introduction
+_________________________________________________________________________
+
+1intro-output.mp3:
+“Hi,
+today I’ll demonstrate how an AI-enabled MCP pipeline simplifies localization and translation management.
+
+2intro-output.mp3:
+Localization is a critical part of any global application, but managing translations at scale remains a major operational challenge.
+
+3intro-output.mp3:
+In platforms like the PepsiCo B2B portal, every new feature introduces translation keys that need to be translated, reviewed, and promoted across multiple environments.
+
+4intro-output.mp3:
+The key problem is that much of this workflow is still manual — teams rely on external translation tools and manual updates, which often lead to missing keys, inconsistent translations, and production risks.
+
+5intro-output.mp3:
+To solve this, we built an AI-enabled Translation MCP pipeline that combines MCP tools, REST APIs, and AI workflows to automate translation management using natural language.
+
+6intro-output.mp3:
+Now let’s see this in action.”
+
+
+_________________________________________________________________________
+
+                                DEMO
+_________________________________________________________________________
+
+
+outoput1.mp3: “I’ll start by simply saying ‘Hi’ to the agent.
+
+outoput2.mp3: The agent responds by asking which mode I want to use. Let’s select Tool mode.
+
+outoput3.mp3: Now the agent prompts me for the next step. Let me ask: ‘What actions can you help me with?’
+
+output4.mp3:
+Now the agent gives me options like:
+listing translations
+translating keys
+updating, approving, or rejecting translations
+
+
+output5.mp3:
+“Let me ask:
+‘Show me all the translation keys for the India market.’
+
+output6.mp3:
+Now let’s wait while the agent calls the appropriate method.
+
+output7.mp3:
+And as we can see, currently there are no keys available for the India market.”
+
+output8.mp3:
+Lets add label firstname and lastname for profile page.
+
+output9.mp3:
+“Now the system has generated the keys based on the provided context and naming conventions, and it’s asking me to confirm the target market.”
+
+output10.mp3:
+“Let’s confirm these keys for the India market.”
+
+output11.mp3:
+“Now the system is asking me to review the generated keys before proceeding.”
+
+output12.mp3:
+“And these look good, so let’s go ahead.”
+
+output13.mp3:
+“Here we go — the system has identified the appropriate tool for adding the entries, and the keys have now been successfully added.”,
+
+output14.mp3:
+“Now let me ask the agent to show all the translation keys for the India market.”
+
+output15.mp3:
+“And this looks perfect.”
+
+output16.mp3:
+“Let’s add a few more keys — product name, quantity, and description for the product page in the India market.”
+
+
+
+output17.mp3:
+““Now the system has generated the keys based on the provided context and naming conventions, and it’s asking me to confirm before proceeding.”
+”
+
+output11.mp3:
+“Now the system is asking me to review the generated keys before proceeding.”
+
+
+output12.mp3:
+“And these look good, so let’s go ahead.”
+
+output13.mp3:
+“Here we go — the system has identified the appropriate tool for adding the entries, and the keys have now been successfully added.”,
+
+
+output14.mp3:
+“Now let me ask the agent to show all the translation keys for the India market.”
+
+
+output15.mp3:
+“And this looks perfect.”
+
+outoput3.mp3: Now the agent prompts me for the next step. Let me ask: ‘What actions can you help me with?’
+
+output18.mp3:
+“Now we’ll try adding a few more keys for the India market on the basket page — such as add to cart, remove, total, quantity, title, and description.”
+
+output17.mp3:
+““Now the system has generated the keys based on the provided context and naming conventions, and it’s asking me to confirm before proceeding.”
+
+output12.mp3:
+“And these look good, so let’s go ahead.”
+
+output19.mp3:
+“Now the system has generated the translations and is asking for confirmation before proceeding to save them.”
+
+output12.mp3:
+“And these look good, so let’s go ahead.”
+
+output13.mp3:
+“Here we go — the system has identified the appropriate tool for adding the entries, and the keys have now been successfully added.”,
+
+output20.mp3:
+“Now we’ll try adding keys that already exist in the system.”
+
+output21.mp3:
+“The system has already identified those existing keys for the selected market and is now providing possible options.”
+
+output22.mp3:
+“Now we’ve asked the system to create these new keys with the ‘_1’ postfix.”
+
+output23.mp3:
+“Again, the system is asking for confirmation before proceeding.”
+
+output12.mp3:
+“And these look good, so let’s go ahead.”
+
+output24.mp3:
+“We just demonstrated how intelligently the system handles existing keys.”
+
+output25.mp3:
+“Now we’ll review the keys that were generated by AI.”
+
+output26.mp3:
+“Now we can select a key, review it, and approve it.”
+
+output12.mp3:
+“And these look good, so let’s go ahead.”
+
+output14.mp3:
+“Now let me ask the agent to show all the translation keys for the India market.”
+
+output27.mp3:
+“And here we go — as you can see, that particular key has now been approved."
+
+output28.mp3:
+"Similarly, we can also update or reject translation keys, and the feedback can be used to regenerate improved translations through the AI pipeline.”

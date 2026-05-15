@@ -1114,6 +1114,9 @@ async def save_direct_translations(session, translations: List[Dict[str, Any]], 
                         locale_code=default_locale,
                         value=default_text,
                         default_text=default_text,
+                        figma_file_key=t.get("figma_file_key"),
+                        figma_node_id=t.get("figma_node_id"),
+                        figma_screenshot_url=t.get("figma_screenshot_url"),
                         status="CREATED",
                         environment=ENV,
                         version=1,
@@ -1153,6 +1156,13 @@ async def save_direct_translations(session, translations: List[Dict[str, Any]], 
                 new_version = (existing.version or 1) + 1
                 existing.value = value
                 existing.default_text = default_text or existing.default_text
+                # persist figma fields if provided
+                if t.get("figma_file_key") is not None:
+                    existing.figma_file_key = t.get("figma_file_key")
+                if t.get("figma_node_id") is not None:
+                    existing.figma_node_id = t.get("figma_node_id")
+                if t.get("figma_screenshot_url") is not None:
+                    existing.figma_screenshot_url = t.get("figma_screenshot_url")
                 existing.version = new_version
                 existing.status = "AI_GENERATED"
                 existing.confidence = confidence
@@ -1187,6 +1197,9 @@ async def save_direct_translations(session, translations: List[Dict[str, Any]], 
                     value=value,
                     default_text=default_text,
                     status="AI_GENERATED",
+                    figma_file_key=t.get("figma_file_key"),
+                    figma_node_id=t.get("figma_node_id"),
+                    figma_screenshot_url=t.get("figma_screenshot_url"),
                     environment=ENV,
                     version=1,
                     confidence=confidence,

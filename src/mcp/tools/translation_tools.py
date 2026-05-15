@@ -1,14 +1,15 @@
-"""MCP translation tools.
+"""MCP translation and Figma tools.
 
-Expose a `register(mcp, log)` function that attaches MCP tools to the
-provided `mcp` FastMCP instance. This avoids circular imports where tools
-import `mcp` from `src.mcp.server` at module import time.
+Exposes a single `register(mcp, log)` function that attaches all MCP tools
+to the provided FastMCP instance: translation tools + Figma integration tools.
 """
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 def register(mcp, log) -> None:
     """Register translation-related MCP tools on the given `mcp` instance."""
+    import traceback as _tb
+    log("[tools] register() called — starting tool registration")
 
     @mcp.tool()
     async def get_translations(
@@ -23,8 +24,6 @@ def register(mcp, log) -> None:
         On error returns a single-element list with an error dict.
         """
         log(f"mcp.get_translations called market={market_code or market_id} locale={locale_code} env={environment}")
-
-        # Local imports so module import doesn't require db/services on sys.path
         from db.session import get_session
         from services.translation_service import list_translations
 
@@ -58,7 +57,6 @@ def register(mcp, log) -> None:
         Returns a dict summary of created items or an error dict on failure.
         """
         log(f"mcp.add_translation called key={key} market={market_code or market_id}")
-
         # Local imports to avoid import-time coupling
         from db.session import get_session
         from services.translation_service import create_translation
@@ -104,7 +102,6 @@ def register(mcp, log) -> None:
         On error returns {"error": "..."}.
         """
         log(f"mcp.add_translations_bulk called items={len(translations)}")
-
         from db.session import get_session
         from services.translation_service import create_translations_bulk
         from api.schemas.bulk import BulkCreateRequest, BulkTranslationItem
@@ -133,7 +130,6 @@ def register(mcp, log) -> None:
           value, context, performed_by, change_reason, status
         """
         log(f"mcp.update_translation called id={translation_id}")
-
         from db.session import get_session
         from services.translation_service import update_translation as svc_update_translation
         from api.schemas.translations import UpdateTranslationRequest
@@ -158,7 +154,6 @@ def register(mcp, log) -> None:
     ) -> dict:
         """Approve a translation by ID. Sets status to APPROVED."""
         log(f"mcp.approve_translation called id={translation_id} by={performed_by}")
-
         from db.session import get_session
         from services.translation_service import approve_translation as svc_approve_translation
         from api.schemas.translations import ApproveTranslationRequest
@@ -184,7 +179,6 @@ def register(mcp, log) -> None:
     ) -> dict:
         """Reject a translation by ID. Optionally provide corrected_value for feedback correction."""
         log(f"mcp.reject_translation called id={translation_id} by={performed_by}")
-
         from db.session import get_session
         from services.translation_service import reject_translation as svc_reject_translation
         from api.schemas.translations import RejectTranslationRequest
@@ -213,7 +207,6 @@ def register(mcp, log) -> None:
         Returns enriched items with `default_locale` and `locales` (non-default locales).
         """
         log(f"mcp.prepare_translations called items_length={len(items) if items else 0}")
-
         from db.session import get_session
         from services.translation_service import resolve_market_locales
 
@@ -272,7 +265,6 @@ def register(mcp, log) -> None:
         `translations` is a JSON string or list of objects with: key, market_code, default_text, locale_code, value
         """
         log(f"mcp.save_translations called items_length={len(translations) if translations else 0} by={performed_by}")
-
         from db.session import get_session
         from services.translation_service import save_direct_translations
 
@@ -307,7 +299,6 @@ def register(mcp, log) -> None:
         and a per-item list with id, key, locale_code, market_code, status, value.
         """
         log(f"mcp.get_batch_status called batch_id={batch_id}")
-
         from db.session import get_session
         from services.translation_service import get_batch_status as svc_get_batch_status
 
@@ -338,7 +329,6 @@ def register(mcp, log) -> None:
         On error returns {"error": "..."}.
         """
         log(f"mcp.add_translations_bulk_async called items={len(translations)}")
-
         from db.session import get_session
         from services.translation_service import create_translations_bulk_db_only, run_bulk_ai_generation
         from api.schemas.bulk import BulkCreateRequest, BulkTranslationItem
@@ -358,3 +348,68 @@ def register(mcp, log) -> None:
         except Exception as exc:
             log(f"add_translations_bulk_async_error: {exc}")
             return {"error": str(exc)}
+
+    log("[tools] translation tools registered successfully")
+    # --- Figma tools ---
+
+    @mcp.tool()
+    def get_figma_screen_config(screen_id: Optional[str] = None) -> Dict[str, Any]:
+        """Return config for a single screen or all screens.
+
+        If `screen_id` is omitted returns the full mapping.
+        """
+        from src.utils.figma_config import load_figma_screens, get_screen_config
+        try:
+            if screen_id:
+                cfg = get_screen_config(screen_id)
+                return {"screen_id": screen_id, "config": cfg}
+            else:
+                return {"screens": load_figma_screens()}
+        except Exception as exc:
+            log(f"get_figma_screen_config error: {exc}")
+            return {"error": str(exc)}
+
+    @mcp.tool()
+    async def update_translation_figma(key: str, figma_file_key: str, figma_node_id: str) -> Dict[str, Any]:
+        """Fetch screenshot URL from Figma and persist it + node link for all market rows of `key`."""
+        from db.session import get_session
+        from src.services.figma_service import update_translation_figma_info
+        try:
+            async for session in get_session():
+                res = await update_translation_figma_info(session, key, figma_file_key, figma_node_id)
+                return res
+        except Exception as exc:
+            log(f"update_translation_figma error: {exc}")
+            return {"error": str(exc)}
+
+    @mcp.tool()
+    async def get_figma_info_tool(key: str, market_code: Optional[str] = None) -> Dict[str, Any]:
+        """Return stored Figma metadata (node ID, screenshot URL, deep link) for a translation key."""
+        from db.session import get_session
+        from src.services.figma_service import get_figma_info
+        try:
+            async for session in get_session():
+                return await get_figma_info(session, key, market_code)
+        except Exception as exc:
+            log(f"get_figma_info_tool error: {exc}")
+            return {"error": str(exc)}
+
+    @mcp.tool()
+    async def get_figma_screenshot_url(figma_file_key: str, figma_node_id: str) -> Dict[str, Any]:
+        """Fetch a CDN PNG URL for a single Figma node via the Figma Images API.
+
+        Pure API call — does not touch the DB. Returns:
+          {"figma_file_key": ..., "figma_node_id": ..., "screenshot_url": "..."}
+        On error returns {"error": "..."}.
+        """
+        from src.ai.figma_client import fetch_image_urls
+        try:
+            urls = await fetch_image_urls(figma_file_key, [figma_node_id])
+            url = urls.get(figma_node_id)
+            if not url:
+                return {"figma_file_key": figma_file_key, "figma_node_id": figma_node_id, "screenshot_url": None, "message": "no image returned by Figma"}
+            return {"figma_file_key": figma_file_key, "figma_node_id": figma_node_id, "screenshot_url": url}
+        except Exception as exc:
+            log(f"get_figma_screenshot_url error: {exc}")
+            return {"error": str(exc)}
+

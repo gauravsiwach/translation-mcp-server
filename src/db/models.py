@@ -41,6 +41,8 @@ class Translation(Base):
     context = Column(Text, nullable=True)
     screen_id = Column(String(128), nullable=True)
     figma_node_id = Column(String(128), nullable=True)
+    figma_file_key = Column(String(255), nullable=True)
+    figma_screenshot_url = Column(Text, nullable=True)
     batch_id = Column(String(64), nullable=True, index=True)
     status = Column(String(32), default="CREATED")
     environment = Column(String(32), default="QA")

@@ -1,4 +1,4 @@
-# 3-minute Demo Script — Translation MCP Server
+ # 3-minute Demo Script — Translation MCP Server
 
 Purpose: A concise, speaker-ready 3-minute demo script to present the project, show core flows, and offer a demo CTA.
 
@@ -10,21 +10,23 @@ Timeline & Script
 
 0:05 – 0:35 | Intro + Problem
 
-“Let me start with a quick overview of the current challenges in localization.
+“Let me start with the core problem we are trying to solve.
 
-Localization is a critical part of any global application.
+Localization is a critical part of any global application — but at scale, it becomes a major operational challenge.
 
-If we look at the PepsiCo B2B portal, it already supports more than 15 markets — and that number continues to grow.
+If we look at the PepsiCo B2B portal, it already supports more than 15 markets — and this number is continuously growing.
 
-But the real challenge is not adding markets — it’s managing translations at scale.
+Now, every new feature introduces new translation keys — and each key needs to be translated, reviewed, versioned, and promoted across multiple environments.
 
-Today, adding or updating localization keys is largely manual. Teams often rely on tools like Google Translate, which lack business and market context — leading to inconsistent or sometimes incorrect translations.
+And this is where the real problem begins.
 
-And it doesn’t stop there.
+Today, this entire process is largely manual. Teams rely on tools like Google Translate, which don’t understand business context, user intent, or market nuances — resulting in inconsistent or sometimes incorrect translations.
 
-When these translation changes are promoted across environments like DEV, QA, and PROD, there’s a high chance of missing keys or pushing incorrect translations.
+But the bigger issue is not just translation — it’s lifecycle management.
 
-So overall, the process becomes error-prone, time-consuming, and difficult to scale.”
+When these changes move from DEV to QA to PROD, there’s a high risk of missing keys, duplicating entries, or pushing incorrect translations — which directly impacts user experience.
+
+So what we’re dealing with is not just inefficiency — it’s a system that is error-prone, hard to control, and very difficult to scale.”
 
 0:35 – 1:00 | Solution Overview
 
@@ -58,14 +60,12 @@ The AI layer itself is flexible — it can integrate with providers like OpenAI,
 
 1:20 – 2:00 | Demo 1 – Add Translation
 
-“Now let’s look at this in action with a simple example.
-
 We have already integrated our MCP server with the IDE, in this case using Windsurf.
+“Now let’s look at this in action with a simple example.
 
 I’ll start by simply saying ‘Hi’ to the agent.
 
 The agent responds by asking which mode I want to use:
-
 API mode — where it uses providers like OpenAI or Anthropic
 or Tool mode — which leverages enterprise integrations
 
@@ -75,7 +75,7 @@ Now the agent gives me options like:
 
 listing translations
 translating keys
-updating, approving, or rejecting entries
+updating, approving, or rejecting translations
 
 I’ll choose to add new keys.
 

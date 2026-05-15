@@ -5,6 +5,7 @@ Run with: `python -m src.mcp.server`
 import sys
 import os
 import logging
+import traceback
 
 from mcp.server.fastmcp import FastMCP
 
@@ -63,10 +64,13 @@ def ping() -> dict:
 try:
     from src.mcp.tools.translation_tools import register as _register_translation_tools
 
+    log(f"sys.path at registration time: {sys.path}")
+    log("calling _register_translation_tools...")
     _register_translation_tools(mcp, log)
-    log("registered src.mcp.tools.translation_tools")
+    log("registered src.mcp.tools.translation_tools — OK")
 except Exception as exc:  # pragma: no cover - safe import
-    log(f"translation_tools registration failed: {exc}")
+    log(f"translation_tools registration FAILED: {exc}")
+    log(f"traceback:\n{traceback.format_exc()}")
 
 
 def main() -> None:
