@@ -3,7 +3,6 @@ from starlette.responses import JSONResponse
 import time
 
 from db import session as db_session
-from db import seed as db_seed
 from api.router import router as api_router
 from utils.logger import get_logger
 from config import settings, ENV_FILE_EXISTS
@@ -61,18 +60,10 @@ async def startup_event():
                 except Exception:
                     logger.exception("db_auto_create_failed")
 
-            from db.models import Base
-
-            table_names = list(Base.metadata.tables.keys())
-            logger.info("db_tables_will_be_created", tables=table_names)
-
-            async with db_session.engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-
-            logger.info("db_tables_created", tables=table_names)
-
-            await db_seed.run()
-            logger.info("db_seed_complete")
+            # NOTE: We intentionally do NOT call Base.metadata.create_all() here.
+            # The project now targets pre-existing production tables in
+            # `customer_uat_ind` and should not attempt to create or modify schema.
+            logger.info("db_startup_skipped_create_all")
         except Exception:
             logger.exception("db_startup_failed")
     else:

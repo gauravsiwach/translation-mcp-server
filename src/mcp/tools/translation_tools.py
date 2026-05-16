@@ -11,350 +11,158 @@ def register(mcp, log) -> None:
     """Register translation-related MCP tools on the given `mcp` instance."""
 
     @mcp.tool()
-    async def get_translations(
-        market_code: Optional[str] = None,
-        market_id: Optional[int] = None,
-        locale_code: Optional[str] = None,
-        environment: str = "DEV",
-    ) -> List[dict]:
-        """List translations grouped by key for a given market/environment.
+    async def list_languages() -> List[dict]:
+        """Return all rows from pepsi_languages.
 
-        Returns a list of dicts: [{"key": ..., "translations": [{...}]}, ...]
+        Returns a list of dicts with language_code, language, created_datetime, updated_datetime.
         On error returns a single-element list with an error dict.
         """
-        log(f"mcp.get_translations called market={market_code or market_id} locale={locale_code} env={environment}")
+        log("mcp.list_languages called")
 
-        # Local imports so module import doesn't require db/services on sys.path
+        from db.session import get_session
+        from services.translation_service import list_languages
+
+        try:
+            async for session in get_session():
+                log("DB session established for list_languages")
+                return await list_languages(session)
+        except Exception as exc:
+            log(f"list_languages_error: {exc}")
+            return [{"error": str(exc)}]
+
+    @mcp.tool()
+    async def get_translations(
+        language_code: Optional[str] = None,
+        type: Optional[str] = None,
+        label: Optional[str] = None,
+    ) -> List[dict]:
+        """Filter translations by label / language_code / type.
+
+        Returns a list of translation dicts with id, label, language_code, translation, type, timestamps.
+        On error returns a single-element list with an error dict.
+        """
+        log(f"mcp.get_translations called language_code={language_code} type={type} label={label}")
+
         from db.session import get_session
         from services.translation_service import list_translations
 
         try:
             async for session in get_session():
-                log(f"DB session established for market={market_code or market_id} locale={locale_code} env={environment}")
-                return await list_translations(
-                    session,
-                    market_code=market_code,
-                    market_id=market_id,
-                    locale_code=locale_code,
-                    environment=environment,
-                )
+                log(f"DB session established for get_translations")
+                return await list_translations(session, language_code=language_code, type_=type, label=label)
         except Exception as exc:
             log(f"get_translations_error: {exc}")
             return [{"error": str(exc)}]
 
     @mcp.tool()
-    async def add_translation(
-        key: str,
-        market_code: Optional[str] = None,
-        market_id: Optional[int] = None,
-        locale_codes: Optional[List[str]] = None,
-        default_text: Optional[str] = None,
-        context: Optional[str] = None,
-        screen_id: Optional[str] = None,
-        propagate_markets: Optional[List[str]] = None,
-    ) -> dict:
-        """Create a translation entry and trigger AI generation.
+    async def create_translation(translations: List[dict]) -> dict:
+        """Bulk upsert translations into pepsi_translations.
 
-        Returns a dict summary of created items or an error dict on failure.
+        Args:
+            translations: Array of dicts with {label, language_code, translation, type?}
+
+        Returns dict with {total, created, updated, results}.
+        On error returns an error dict.
         """
-        log(f"mcp.add_translation called key={key} market={market_code or market_id}")
+        log(f"mcp.create_translation called with {len(translations)} items")
 
-        # Local imports to avoid import-time coupling
         from db.session import get_session
         from services.translation_service import create_translation
-        try:
-            # Import Pydantic request model for validation
-            from api.schemas.translations import AddTranslationRequest
-
-            payload = AddTranslationRequest(
-                key=key,
-                market_code=market_code,
-                market_id=market_id,
-                locale_codes=locale_codes,
-                default_text=default_text,
-                context=context,
-                screen_id=screen_id,
-                propagate_markets=propagate_markets or [],
-            )
-
-            async for session in get_session():
-                result = await create_translation(session, payload)
-                # Convert Pydantic result to plain dict (pydantic v2 safe)
-                try:
-                    return result.model_dump()
-                except Exception:
-                    return getattr(result, "__dict__", {"result": str(result)})
-        except Exception as exc:
-            log(f"add_translation_error: {exc}")
-            return {"error": str(exc)}
-
-    @mcp.tool()
-    async def add_translations_bulk(
-        translations: List[dict],
-    ) -> dict:
-        """Bulk-create translation keys and trigger AI generation (max 50 items).
-
-        Each item in `translations` must have:
-          - key (string, required)
-          - market_code (string, required)
-          - default_text (string, required)
-          - context (string, optional)
-
-        Returns a summary dict with total_requested, total_created, total_failed, results.
-        On error returns {"error": "..."}.
-        """
-        log(f"mcp.add_translations_bulk called items={len(translations)}")
-
-        from db.session import get_session
-        from services.translation_service import create_translations_bulk
-        from api.schemas.bulk import BulkCreateRequest, BulkTranslationItem
 
         try:
-            items = [BulkTranslationItem(**item) for item in translations]
-            payload = BulkCreateRequest(translations=items)
             async for session in get_session():
-                result = await create_translations_bulk(session, payload)
-                try:
-                    return result.model_dump()
-                except Exception:
-                    return getattr(result, "__dict__", {"result": str(result)})
+                result = await create_translation(session, translations)
+                return result
         except Exception as exc:
-            log(f"add_translations_bulk_error: {exc}")
+            log(f"create_translation_error: {exc}")
             return {"error": str(exc)}
 
     @mcp.tool()
     async def update_translation(
-        translation_id: int,
-        updates: dict,
+        translation_id: Optional[int] = None,
+        label: Optional[str] = None,
+        language_code: Optional[str] = None,
+        translation: Optional[str] = None,
+        type: Optional[str] = None,
     ) -> dict:
-        """Update a translation by ID.
+        """Update translation text / type by id OR by label+language_code.
 
-        `updates` is a partial object matching UpdateTranslationRequest fields:
-          value, context, performed_by, change_reason, status
+        Args:
+            translation_id: ID of the translation (if updating by ID)
+            label: Label of the translation (if updating by key)
+            language_code: Language code (required if updating by key)
+            translation: New translation text
+            type: New type value
+
+        Returns the updated translation dict with id, label, language_code, translation, type, timestamps.
+        On error returns an error dict.
         """
-        log(f"mcp.update_translation called id={translation_id}")
+        log(f"mcp.update_translation called id={translation_id} label={label} language_code={language_code}")
 
         from db.session import get_session
-        from services.translation_service import update_translation as svc_update_translation
-        from api.schemas.translations import UpdateTranslationRequest
+        from services.translation_service import update_translation
 
         try:
-            payload = UpdateTranslationRequest(**updates)
             async for session in get_session():
-                result = await svc_update_translation(session, translation_id, payload)
-                try:
-                    return result.model_dump()
-                except Exception:
-                    return getattr(result, "__dict__", {"result": str(result)})
+                result = await update_translation(
+                    session,
+                    translation_id=translation_id,
+                    label=label,
+                    language_code=language_code,
+                    translation=translation,
+                    type_=type,
+                )
+                if not result:
+                    return {"error": "Translation not found"}
+                return result
         except Exception as exc:
             log(f"update_translation_error: {exc}")
             return {"error": str(exc)}
 
     @mcp.tool()
-    async def approve_translation(
-        translation_id: int,
-        performed_by: Optional[str] = None,
-        reason: Optional[str] = None,
-    ) -> dict:
-        """Approve a translation by ID. Sets status to APPROVED."""
-        log(f"mcp.approve_translation called id={translation_id} by={performed_by}")
+    async def ai_translate(translations: List[dict]) -> dict:
+        """Bulk AI translate labels across target language codes.
 
-        from db.session import get_session
-        from services.translation_service import approve_translation as svc_approve_translation
-        from api.schemas.translations import ApproveTranslationRequest
+        Args:
+            translations: Array of dicts with {label, source_text, target_language_codes, type?}
 
-        try:
-            payload = ApproveTranslationRequest(performed_by=performed_by, reason=reason)
-            async for session in get_session():
-                result = await svc_approve_translation(session, translation_id, payload)
-                try:
-                    return result.model_dump()
-                except Exception:
-                    return getattr(result, "__dict__", {"result": str(result)})
-        except Exception as exc:
-            log(f"approve_translation_error: {exc}")
-            return {"error": str(exc)}
-
-    @mcp.tool()
-    async def reject_translation(
-        translation_id: int,
-        performed_by: Optional[str] = None,
-        reason: Optional[str] = None,
-        corrected_value: Optional[str] = None,
-    ) -> dict:
-        """Reject a translation by ID. Optionally provide corrected_value for feedback correction."""
-        log(f"mcp.reject_translation called id={translation_id} by={performed_by}")
-
-        from db.session import get_session
-        from services.translation_service import reject_translation as svc_reject_translation
-        from api.schemas.translations import RejectTranslationRequest
-
-        try:
-            payload = RejectTranslationRequest(
-                performed_by=performed_by,
-                reason=reason,
-                corrected_value=corrected_value,
-            )
-            async for session in get_session():
-                result = await svc_reject_translation(session, translation_id, payload)
-                try:
-                    return result.model_dump()
-                except Exception:
-                    return getattr(result, "__dict__", {"result": str(result)})
-        except Exception as exc:
-            log(f"reject_translation_error: {exc}")
-            return {"error": str(exc)}
-
-    @mcp.tool()
-    async def prepare_translations(items: str) -> dict:
-        """Prepare translations for MCP direct translation flow.
-
-        `items` is a JSON string array of objects with keys: key, market_code, default_text, context?
-        Returns enriched items with `default_locale` and `locales` (non-default locales).
+        Returns dict with:
+            - Sync mode (≤10 items): {mode: "sync", total_requested, upserted, total}
+            - Async mode (>10 items): {mode: "async", batch_id, total_requested, status}
+        On error returns an error dict.
         """
-        log(f"mcp.prepare_translations called items_length={len(items) if items else 0}")
+        log(f"mcp.ai_translate called with {len(translations)} items")
 
         from db.session import get_session
-        from services.translation_service import resolve_market_locales
+        from services.translation_service import ai_translate
 
         try:
-            parsed = None
-            if isinstance(items, str):
-                import json as _json
-
-                parsed = _json.loads(items)
-            elif isinstance(items, list):
-                parsed = items
-            else:
-                raise ValueError("Items must be a JSON string or list")
-
-            if not isinstance(parsed, list):
-                raise ValueError("Items must be an array")
-
-            if not (1 <= len(parsed) <= 50):
-                raise ValueError("Items array must contain between 1 and 50 items")
-
-            # validate fields and collect market codes
-            market_codes = set()
-            for it in parsed:
-                if not isinstance(it, dict):
-                    raise ValueError("Each item must be an object")
-                if not it.get("key") or not it.get("market_code") or not it.get("default_text"):
-                    raise ValueError("Each item must include key, market_code, and default_text")
-                market_codes.add(it["market_code"])
-
             async for session in get_session():
-                mapping = await resolve_market_locales(session, list(market_codes))
-
-            # enrich items
-            out_items = []
-            for it in parsed:
-                mc = it["market_code"]
-                entry = mapping.get(mc, {"default_locale": None, "locales": []})
-                out_items.append({
-                    "key": it.get("key"),
-                    "market_code": mc,
-                    "default_text": it.get("default_text"),
-                    "context": it.get("context"),
-                    "default_locale": entry.get("default_locale"),
-                    "locales": entry.get("locales") or [],
-                })
-
-            return {"items": out_items}
+                result = await ai_translate(session, translations)
+                return result
         except Exception as exc:
-            log(f"prepare_translations_error: {exc}")
+            log(f"ai_translate_error: {exc}")
             return {"error": str(exc)}
 
     @mcp.tool()
-    async def save_translations(translations: str, performed_by: Optional[str] = None) -> dict:
-        """Persist translations produced by MCP host AI.
+    async def get_batch_status(batch_id: str) -> dict:
+        """Get status of an async AI translation batch.
 
-        `translations` is a JSON string or list of objects with: key, market_code, default_text, locale_code, value
-        """
-        log(f"mcp.save_translations called items_length={len(translations) if translations else 0} by={performed_by}")
+        Args:
+            batch_id: Batch ID returned by ai_translate in async mode
 
-        from db.session import get_session
-        from services.translation_service import save_direct_translations
-
-        try:
-            parsed = None
-            if isinstance(translations, str):
-                import json as _json
-
-                parsed = _json.loads(translations)
-            elif isinstance(translations, list):
-                parsed = translations
-            else:
-                raise ValueError("translations must be a JSON string or list")
-
-            if not isinstance(parsed, list):
-                raise ValueError("translations must be an array")
-
-            async for session in get_session():
-                res = await save_direct_translations(session, parsed, performed_by=performed_by)
-                return res
-        except Exception as exc:
-            log(f"save_translations_error: {exc}")
-            return {"error": str(exc)}
-
-    @mcp.tool()
-    async def get_batch_status(
-        batch_id: str,
-    ) -> dict:
-        """Get live status for an async bulk translations batch.
-
-        Returns summary: batch_id, total, completed, pending, failed, is_complete,
-        and a per-item list with id, key, locale_code, market_code, status, value.
+        Returns dict with {batch_id, status, total, completed, pending, failed, results?}.
+        On error returns an error dict.
         """
         log(f"mcp.get_batch_status called batch_id={batch_id}")
 
-        from db.session import get_session
-        from services.translation_service import get_batch_status as svc_get_batch_status
+        from services.translation_service import get_batch_status
 
         try:
-            async for session in get_session():
-                result = await svc_get_batch_status(session, batch_id)
-                try:
-                    return result.model_dump()
-                except Exception:
-                    return getattr(result, "__dict__", {"result": str(result)})
+            result = get_batch_status(batch_id)
+            if result is None:
+                return {"error": f"Batch {batch_id} not found"}
+            return result
         except Exception as exc:
             log(f"get_batch_status_error: {exc}")
-            return {"error": str(exc)}
-
-    @mcp.tool()
-    async def add_translations_bulk_async(
-        translations: List[dict],
-    ) -> dict:
-        """Async bulk-create translation keys (max 50 items). Returns batch_id immediately; AI runs in background.
-
-        Each item in `translations` must have:
-          - key (string, required)
-          - market_code (string, required)
-          - default_text (string, required)
-          - context (string, optional)
-
-        Returns a summary dict with total_requested, total_created, total_failed, results.
-        On error returns {"error": "..."}.
-        """
-        log(f"mcp.add_translations_bulk_async called items={len(translations)}")
-
-        from db.session import get_session
-        from services.translation_service import create_translations_bulk_db_only, run_bulk_ai_generation
-        from api.schemas.bulk import BulkCreateRequest, BulkTranslationItem
-        import asyncio
-
-        try:
-            items = [BulkTranslationItem(**item) for item in translations]
-            payload = BulkCreateRequest(translations=items)
-            async for session in get_session():
-                result = await create_translations_bulk_db_only(session, payload)
-                # fire-and-forget background AI generation
-                asyncio.ensure_future(run_bulk_ai_generation(result.batch_id))
-                try:
-                    return result.model_dump()
-                except Exception:
-                    return getattr(result, "__dict__", {"result": str(result)})
-        except Exception as exc:
-            log(f"add_translations_bulk_async_error: {exc}")
             return {"error": str(exc)}
