@@ -397,10 +397,157 @@ Example response (async):
 {
   "mode": "async",
   "batch_id": "abc-123-def",
-  "total_requested": 15,
+  "total_requested": 25,
   "status": "processing"
 }
 ```
+
+---
+
+## File-Based Translation Import (API Mode & Tool Mode)
+
+### When to use
+- User attaches a CSV/JSON translation file
+- User wants to bulk import/update translations
+- User says "process this translation file" or similar
+
+### File Format Requirements
+- **Required columns:** `type`, `key`, `en`
+- **Optional columns:** Any valid Pepsi locale codes (e.g., `hi_IND`, `es_ES`)
+- **Source language:** Always `en` (English)
+- **Empty cells:** Trigger AI translation
+- **Filled cells:** Skip AI translation (upsert directly)
+
+### API Mode Workflow
+
+When user attaches a translation file:
+
+1. **Read and validate file:**
+   ```
+   - Read file content (Windsurf can read attached files)
+   - Parse CSV/JSON structure
+   - Validate required columns exist (type, key, en)
+   - Validate locale columns against list_languages()
+   - If validation fails, explain errors to user
+   ```
+
+2. **Process existing translations:**
+   ```
+   - For each row with filled locale values:
+     - Call create_translation() with:
+       {
+         "label": row.key,
+         "language_code": locale,
+         "translation": row[locale],
+         "type": row.type
+       }
+   - Process in batches of 10 using create_translation array input
+   ```
+
+3. **Process missing translations (AI):**
+   ```
+   - For each row with empty locale values:
+     - Get target locales from file columns
+     - Call ai_translate() with:
+       {
+         "label": row.key,
+         "source_text": row.en,
+         "target_language_codes": [empty_locales],
+         "type": row.type
+       }
+   - Process in batches of 10 (auto sync/async)
+   - If >10 items, inform user about batch_id for tracking
+   ```
+
+4. **Report results:**
+   ```
+   - Show summary: X keys processed, Y translations created, Z AI-generated
+   - If async batch, provide batch_id and suggest checking status
+   - Offer to download updated file via REST API
+   ```
+
+### Tool Mode Workflow
+
+When user attaches a translation file in Tool mode:
+
+1. **Read and validate file** (same as API mode)
+
+2. **Ask user for confirmation:**
+   ```
+   "I found X keys in the file. Y have existing translations, Z need AI translation.
+   Shall I proceed with:
+   - Upserting Y existing translations
+   - AI translating Z missing translations for locales: [list]"
+   ```
+
+3. **Process with create_translation tool:**
+   ```
+   - Use create_translation() for all rows (upsert logic handles existing)
+   - Process in batches of 10
+   ```
+
+4. **Process missing with ai_translate tool:**
+   ```
+   - For rows with empty locales, call ai_translate()
+   - Process in batches of 10
+   - Track batch_id if async
+   ```
+
+5. **Report results** (same as API mode)
+
+### Example Interaction
+
+**User:** "Process this translation file" [attaches translations.csv]
+
+**AI Response:**
+```
+I've read your translation file with 25 keys:
+- 15 keys have hi_IND translations (will upsert)
+- 10 keys need AI translation for hi_IND
+- All keys have 'en' source text
+
+Validating locale columns... ✓ All valid
+
+Processing:
+1. Upserting 15 existing translations...
+   ✓ Batch 1 (10 items) completed
+   ✓ Batch 2 (5 items) completed
+
+2. AI translating 10 missing translations...
+   ✓ Batch created (batch_id: abc-123)
+   Status: Processing
+
+Check status: get_batch_status("abc-123")
+Download updated file: GET /translations/batch/abc-123/download?format=csv
+```
+
+### Error Handling
+
+- **Invalid file format:** Explain expected CSV/JSON structure
+- **Missing required columns:** List missing columns (type, key, en)
+- **Invalid locale columns:** List invalid locales, suggest valid ones from list_languages()
+- **Empty file:** Inform user and ask for valid file
+- **Duplicate keys:** Warn user, last occurrence wins (upsert behavior)
+
+### REST API (Direct Access)
+
+For non-MCP users or direct API access:
+
+**Upload file:**
+```
+POST /translations/upload
+Content-Type: multipart/form-data
+
+file: <file>
+format: csv|json
+```
+
+**Download completed file:**
+```
+GET /translations/batch/{batch_id}/download?format=csv|json
+```
+
+This is useful when users want direct API access without Windsurf/GitHub Copilot.
 
 ### get_batch_status
 **When:** API mode only — user wants to check progress of async batch

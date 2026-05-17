@@ -1,4 +1,4 @@
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict, Any
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
@@ -68,3 +68,15 @@ class BatchStatusResponse(BaseModel):
     failed: int
     results: Optional[List[dict]] = None
     error: Optional[str] = None
+
+
+class FileUploadResponse(BaseModel):
+    batch_id: str
+    status: str
+    total_keys: int
+    message: str
+
+
+class FileValidationError(BaseModel):
+    error: str
+    details: Optional[Dict[str, Any]] = None

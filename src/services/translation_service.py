@@ -6,6 +6,7 @@ import uuid
 
 from db.models import PepsiLanguage, PepsiTranslation
 from utils.logger import get_logger
+from config import settings
 
 logger = get_logger("translation_service")
 
@@ -276,7 +277,7 @@ async def ai_translate(
             ai_results = await generate_translation(
                 source_text,
                 target_language_codes,
-                market_code="PEPSI",
+                market_code="IN",
                 timeout=30,
                 purpose="direct_translation",
                 key=label,
@@ -326,8 +327,8 @@ async def ai_translate(
     if isinstance(translations, list):
         total_items = len(translations)
         
-        # Async mode for >10 items
-        if total_items > 10:
+        # Async mode for >AI_BATCH_SIZE items
+        if total_items > settings.AI_BATCH_SIZE:
             import asyncio
             from db.session import get_session as get_session_func
             
@@ -342,17 +343,20 @@ async def ai_translate(
                 "pending": total_items,
                 "failed": 0,
                 "results": [],
+                # Optional fields for file tracking
+                "file_type": None,  # csv or json
+                "keys": [],  # List of keys being processed
             }
             
-            # Start background task with batching (10 items per AI call)
+            # Start background task with batching (AI_BATCH_SIZE items per AI call)
             async def process_batch():
                 try:
                     from ai.agent import generate_translations_bulk, _build_item
                     all_upserted: List[Dict[str, Any]] = []
                     
-                    # Split into batches of 10
-                    for i in range(0, len(translations), 10):
-                        batch = translations[i:i+10]
+                    # Split into batches of AI_BATCH_SIZE
+                    for i in range(0, len(translations), settings.AI_BATCH_SIZE):
+                        batch = translations[i:i+settings.AI_BATCH_SIZE]
                         
                         # Build items for bulk AI call
                         ai_items = []
@@ -360,7 +364,7 @@ async def ai_translate(
                             ai_items.append(_build_item(
                                 item.get("source_text"),
                                 item.get("target_language_codes"),
-                                "PEPSI",
+                                "IN",
                                 key=item.get("label"),
                                 context=item.get("type"),
                             ))
@@ -369,7 +373,7 @@ async def ai_translate(
                         ai_results = await generate_translations_bulk(
                             ai_items,
                             provider=None,
-                            timeout=60.0,
+                            timeout=120.0,
                             system_prompt=None,
                         )
                         

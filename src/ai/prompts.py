@@ -25,9 +25,9 @@ Return a single flat JSON ARRAY (no extra text). Each element represents one (ke
 EACH INPUT OBJECT fields:
 - key: the translation key (e.g., "checkout.cta.submit") — copy verbatim into every output object from it
 - source_text: the canonical/default text in source language
-- market_code: optional market context (e.g., "US", "EU")
+- market_code: optional market context (e.g., "IN", "US")
 - context: optional short usage context (screen name or UI area)
-- requested_locales: ARRAY of locale tokens exactly as provided (e.g., ["hi_IND", "es_MX"]). Use verbatim.
+- requested_locales: ARRAY of locale tokens exactly as provided (e.g., ["hi_IND", "en"]). Use verbatim.
 - formality: optional "formal" | "informal" | "neutral" (default: "neutral")
 
 REQUIREMENTS (strict):
@@ -43,6 +43,8 @@ REQUIREMENTS (strict):
 10) Return RAW JSON only. The output must start with `[` and end with `]`.
 11) Preserve placeholders `{...}` exactly — do not translate, modify, remove, or reorder them; translate only the surrounding text.
 12) Preserve HTML/Markdown tags exactly — do not translate or modify tags/attributes; translate only visible text.
+13) Translate all text including brand names and product names. Only preserve text wrapped in curly braces {} as placeholders.
+14) When text contains placeholders, translate ALL surrounding text - only keep the placeholder itself unchanged. Example: "Hi {name}" → "नमस्ते {name}"
 
 OUTPUT SCHEMA (each element in the returned array):
 {
@@ -59,27 +61,31 @@ OUTPUT SCHEMA (each element in the returned array):
 
 User message:
 [
-    {"key": "checkout.cta.submit", "source_text": "Submit",     "market_code": "US", "requested_locales": ["hi_IND", "en_US"], "formality": "neutral"},
-    {"key": "profile.first_name",  "source_text": "First Name", "market_code": "US", "requested_locales": ["hi_IND"],          "formality": "neutral"}
+    {"key": "checkout.cta.submit", "source_text": "Submit",     "market_code": "IN", "requested_locales": ["hi_IND", "en"], "formality": "neutral"},
+    {"key": "profile.first_name",  "source_text": "First Name", "market_code": "IN", "requested_locales": ["hi_IND"],          "formality": "neutral"},
+    {"key": "about_club.title_label",  "source_text": "About Club+", "market_code": "IN", "requested_locales": ["hi_IND"],          "formality": "neutral"}
 ]
 
 Expected output (flat array, all results together):
 [
     {"key": "checkout.cta.submit", "locale": "hi_IND", "status": "success", "value": "सबमिट करें",  "confidence": 0.88, "notes": "", "quality_flags": []},
-    {"key": "checkout.cta.submit", "locale": "en_US",  "status": "success", "value": "Submit",       "confidence": 0.95, "notes": "", "quality_flags": []},
-    {"key": "profile.first_name",  "locale": "hi_IND", "status": "success", "value": "प्रथम नाम",    "confidence": 0.91, "notes": "", "quality_flags": []}
+    {"key": "checkout.cta.submit", "locale": "en",  "status": "success", "value": "Submit",       "confidence": 0.95, "notes": "", "quality_flags": []},
+    {"key": "profile.first_name",  "locale": "hi_IND", "status": "success", "value": "प्रथम नाम",    "confidence": 0.91, "notes": "", "quality_flags": []},
+    {"key": "about_club.title_label", "locale": "hi_IND", "status": "success", "value": "क्लब+ के बारे में", "confidence": 0.92, "notes": "", "quality_flags": []}
 ]
 
 --- PLACEHOLDER EXAMPLE ---
 
 User message:
 [
-    {"key": "profile.total_points", "source_text": "{Points} of {TotalPoint}", "market_code": "IN", "requested_locales": ["hi_IND"], "formality": "neutral"}
+    {"key": "profile.total_points", "source_text": "{Points} of {TotalPoint}", "market_code": "IN", "requested_locales": ["hi_IND"], "formality": "neutral"},
+    {"key": "account.how_can_we_help", "source_text": "Hi {hand}, how can we help?", "market_code": "IN", "requested_locales": ["hi_IND"], "formality": "neutral"}
 ]
 
 Expected output:
 [
-    {"key": "profile.total_points", "locale": "hi_IND", "status": "success", "value": "{Points} में से {TotalPoint}", "confidence": 0.90, "notes": "", "quality_flags": []}
+    {"key": "profile.total_points", "locale": "hi_IND", "status": "success", "value": "{Points} में से {TotalPoint}", "confidence": 0.90, "notes": "", "quality_flags": []},
+    {"key": "account.how_can_we_help", "locale": "hi_IND", "status": "success", "value": "नमस्कार {hand}, हम आपकी कैसे सहायता कर सकते हैं?", "confidence": 0.85, "notes": "", "quality_flags": []}
 ]
 
 --- RICH TEXT EXAMPLE ---

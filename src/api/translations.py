@@ -1,6 +1,7 @@
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, HTTPException, status, Body
+from fastapi import APIRouter, HTTPException, status, Body, UploadFile, File, Form, Query
+from config import settings
 
 from api.schemas.translations import (
     LanguageResponse,
@@ -11,6 +12,7 @@ from api.schemas.translations import (
     AITranslateRequest,
     AITranslateBulkRequest,
     BatchStatusResponse,
+    FileUploadResponse,
 )
 from db.session import get_session
 from services.translation_service import (
@@ -21,6 +23,13 @@ from services.translation_service import (
     update_translation,
     ai_translate,
     get_batch_status,
+)
+from services.file_service import (
+    parse_csv_file,
+    parse_json_file,
+    validate_locale_columns,
+    prepare_translation_items,
+    generate_output_file,
 )
 from utils.logger import get_logger
 
@@ -58,6 +67,42 @@ async def get_translations(
     except Exception as exc:
         logger.exception("get_translations.failed", exc=str(exc))
         raise HTTPException(status_code=500, detail="internal server error")
+
+
+@router.get("/translations/download")
+async def download_translation_file(format: str = Query(..., pattern="^(csv|json)$")):
+    """Download all translations from database as CSV or JSON."""
+    logger.info("download_translation_file.called", format=format)
+    
+    try:
+        async for session in get_session():
+            # Fetch all translations from database
+            translations = await list_translations(session)
+            
+            # Infer locale columns from translations
+            locale_set = set(t["language_code"] for t in translations)
+            locale_columns = [lc for lc in locale_set if lc != settings.SOURCE_LANGUAGE]
+            
+            # Generate output file
+            file_content = generate_output_file(translations, format, locale_columns)
+            
+            # Set appropriate content type
+            content_type = "text/csv" if format == "csv" else "application/json"
+            filename = f"translations_all.{format}"
+            
+            logger.info("download_translation_file.completed", format=format, size=len(file_content), translations=len(translations))
+            
+            from fastapi.responses import Response
+            return Response(
+                content=file_content,
+                media_type=content_type,
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename}"
+                }
+            )
+    except Exception as exc:
+        logger.exception("download_translation_file.failed", exc=str(exc))
+        raise HTTPException(status_code=500, detail="Failed to download translations")
 
 
 @router.get("/translations/{translation_id}", response_model=TranslationResponse)
@@ -160,5 +205,100 @@ async def get_batch_status_endpoint(batch_id: str):
     if not result:
         logger.warning("get_batch_status.not_found", batch_id=batch_id)
         raise HTTPException(status_code=404, detail="Batch not found")
+    # Add batch_id to response for schema validation
+    result["batch_id"] = batch_id
     logger.info("get_batch_status.completed", batch_id=batch_id, status=result["status"])
     return result
+
+
+@router.post("/translations/upload", response_model=FileUploadResponse)
+async def upload_translation_file(
+    file: UploadFile = File(...),
+    format: str = Form(...),
+):
+    """Upload and process translation file (CSV or JSON)."""
+    logger.info("upload_translation_file.called", filename=file.filename, format=format)
+    
+    # Validate format
+    if format not in ["csv", "json"]:
+        raise HTTPException(status_code=400, detail="Format must be 'csv' or 'json'")
+    
+    # Validate file size
+    file_content = await file.read()
+    file_size_mb = len(file_content) / (1024 * 1024)
+    if file_size_mb > settings.MAX_FILE_SIZE_MB:
+        raise HTTPException(
+            status_code=413, 
+            detail=f"File size {file_size_mb:.2f}MB exceeds maximum of {settings.MAX_FILE_SIZE_MB}MB"
+        )
+    
+    try:
+        # Parse file
+        if format == "csv":
+            rows, columns = parse_csv_file(file_content)
+        else:
+            rows, columns = parse_json_file(file_content)
+        
+        # Validate locale columns
+        async for session in get_session():
+            valid_locales_result = await list_languages(session)
+            valid_locales = [l["language_code"] for l in valid_locales_result]
+            
+        validation = validate_locale_columns(columns, valid_locales)
+        if not validation["valid"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid locale columns: {validation['invalid_locales']}. Valid locales: {valid_locales}"
+            )
+        
+        locale_columns = validation["valid_locales"]
+        
+        # Prepare translation items
+        items = prepare_translation_items(rows, locale_columns, settings.SKIP_AI_IF_VALUE_EXISTS)
+        
+        # Process existing translations
+        if items["existing"]:
+            async for session in get_session():
+                await create_translation(session, translations=items["existing"])
+        
+        # Process missing translations with AI
+        batch_id = None
+        if items["missing"]:
+            async for session in get_session():
+                result = await ai_translate(session, translations=items["missing"])
+                if "batch_id" in result:
+                    batch_id = result["batch_id"]
+        
+        # If no batch_id (sync mode or no AI needed), generate one for tracking
+        if not batch_id:
+            import uuid
+            batch_id = str(uuid.uuid4())
+            # Store in batch_status for download
+            from services.translation_service import batch_status as batch_status_store
+            batch_status_store[batch_id] = {
+                "status": "completed",
+                "total": len(items["keys"]),
+                "completed": len(items["keys"]),
+                "pending": 0,
+                "failed": 0,
+                "results": [],
+                "file_type": format,
+                "keys": items["keys"],
+            }
+        
+        logger.info("upload_translation_file.completed", batch_id=batch_id, total_keys=len(items["keys"]))
+        return FileUploadResponse(
+            batch_id=batch_id,
+            status="processing" if items["missing"] else "completed",
+            total_keys=len(items["keys"]),
+            message=f"File is being processed. Check status using batch_id: {batch_id}"
+        )
+        
+    except ValueError as exc:
+        logger.warning("upload_translation_file.validation_error", exc=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("upload_translation_file.failed", exc=str(exc))
+        raise HTTPException(status_code=500, detail="internal server error")

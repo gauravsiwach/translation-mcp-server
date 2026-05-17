@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     AI_MODEL: Optional[str] = None
     OPENAI_TIMEOUT: Optional[int] = None
     OLLAMA_URL: Optional[str] = None
+    # File import settings
+    SKIP_AI_IF_VALUE_EXISTS: bool = True
+    SOURCE_LANGUAGE: str = "en"
+    MAX_FILE_SIZE_MB: int = 10
+    AI_BATCH_SIZE: int = 20
 
     model_config = {
         "env_file": ENV_FILE,
