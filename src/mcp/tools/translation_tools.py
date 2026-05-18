@@ -166,3 +166,52 @@ def register(mcp, log) -> None:
         except Exception as exc:
             log(f"get_batch_status_error: {exc}")
             return {"error": str(exc)}
+
+    @mcp.tool()
+    async def download_translations(format: str = "csv") -> dict:
+        """Download all translations from database as CSV or JSON.
+
+        Args:
+            format: Export format - "csv" (default) or "json"
+
+        Returns dict with {content, filename, content_type} containing the file data.
+        On error returns an error dict.
+        """
+        log(f"mcp.download_translations called format={format}")
+
+        if format not in ("csv", "json"):
+            return {"error": "Invalid format. Must be 'csv' or 'json'"}
+
+        try:
+            from db.session import get_session
+            from services.translation_service import list_translations
+            from services.file_service import generate_output_file
+            from src.config import settings
+
+            async for session in get_session():
+                # Fetch all translations from database
+                translations = await list_translations(session)
+                
+                # Infer locale columns from translations
+                locale_set = set(t["language_code"] for t in translations)
+                locale_columns = [lc for lc in locale_set if lc != settings.SOURCE_LANGUAGE]
+                
+                # Generate output file
+                file_content = generate_output_file(translations, format, locale_columns)
+                
+                # Set appropriate content type
+                content_type = "text/csv" if format == "csv" else "application/json"
+                filename = f"translations_all.{format}"
+                
+                log(f"download_translations completed: format={format}, size={len(file_content)}, translations={len(translations)}")
+                
+                return {
+                    "content": file_content,
+                    "filename": filename,
+                    "content_type": content_type,
+                    "size": len(file_content),
+                    "translations_count": len(translations)
+                }
+        except Exception as exc:
+            log(f"download_translations_error: {exc}")
+            return {"error": str(exc)}

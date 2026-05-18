@@ -47,6 +47,8 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 > 2. **View translations** — browse keys by locale, label, or type
 > 3. **Add translations** — provide label + value; I translate using IDE AI; you review before saving
 > 4. **Update translation** — modify existing translation by ID
+> 5. **Process translation file** — attach CSV/JSON file to bulk import/update translations
+> 6. **Download translations** — export all translations as CSV or JSON
 >
 > What would you like to do?"
 
@@ -441,7 +443,7 @@ When user attaches a translation file:
          "translation": row[locale],
          "type": row.type
        }
-   - Process in batches of 10 using create_translation array input
+   - Process in batches of 20 using create_translation array input
    ```
 
 3. **Process missing translations (AI):**
@@ -455,8 +457,8 @@ When user attaches a translation file:
          "target_language_codes": [empty_locales],
          "type": row.type
        }
-   - Process in batches of 10 (auto sync/async)
-   - If >10 items, inform user about batch_id for tracking
+   - Process in batches of 20 (auto sync/async)
+   - If >20 items, inform user about batch_id for tracking
    ```
 
 4. **Report results:**
@@ -470,30 +472,50 @@ When user attaches a translation file:
 
 When user attaches a translation file in Tool mode:
 
-1. **Read and validate file** (same as API mode)
-
-2. **Ask user for confirmation:**
+1. **Read and validate file:**
    ```
-   "I found X keys in the file. Y have existing translations, Z need AI translation.
-   Shall I proceed with:
-   - Upserting Y existing translations
-   - AI translating Z missing translations for locales: [list]"
-   ```
-
-3. **Process with create_translation tool:**
-   ```
-   - Use create_translation() for all rows (upsert logic handles existing)
-   - Process in batches of 10
+   - Parse CSV/JSON structure
+   - Validate required columns (type, key, en)
+   - Validate locale columns against list_languages()
+   - Show summary: "Found X keys for locale(s): hi_IND. Will process in Y batches of 20."
+   - Ask: "Continue with batch processing?"
    ```
 
-4. **Process missing with ai_translate tool:**
+2. **After user confirms, process batches:**
    ```
-   - For rows with empty locales, call ai_translate()
-   - Process in batches of 10
-   - Track batch_id if async
+   For each batch:
+   
+   a. IDE AI translates the batch internally (20 keys)
+   
+   b. Show translated results for review:
+      Batch N/Y:
+      | # | Key | Type | en | hi_IND (translated) |
+      |---|-----|------|----|-----------------------|
+      | 1 | basket.total | ui | Total | कुल |
+      | 2 | profile.save | ui | Save | सहेजें |
+      ...
+   
+   c. Ask: "Review these translations. Confirm to save to database?"
+   
+   d. After confirmation, call create_translation() with:
+      [
+        {"label": "basket.total", "language_code": "en", "translation": "Total", "type": "ui"},
+        {"label": "basket.total", "language_code": "hi_IND", "translation": "कुल", "type": "ui"},
+        {"label": "profile.save", "language_code": "en", "translation": "Save", "type": "ui"},
+        {"label": "profile.save", "language_code": "hi_IND", "translation": "सहेजें", "type": "ui"},
+        ...
+      ]
+   
+   e. Show results: "✓ Batch N/Y saved: X created, Y updated"
+   
+   f. Move to next batch (repeat a-e)
    ```
 
-5. **Report results** (same as API mode)
+3. **Report final results:**
+   ```
+   - Show summary: "✓ All X keys processed in Y batches. Z translations saved to database."
+   - If any batch failed, show error details
+   ```
 
 ### Example Interaction
 

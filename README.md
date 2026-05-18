@@ -89,6 +89,15 @@ This service is a **centralized translation backend** that tackles the problem o
 
 ---
 
+## Prerequisites
+
+- Python 3.11+
+- PostgreSQL 14+
+- OpenAI API key (or Ollama for local AI)
+- Virtual environment (venv)
+
+---
+
 ## Quick Start
 
 > For the full developer setup guide (venv, migrations, MCP server, DB UI, Ollama): see **[docs/HELP_COMMANDS.md](docs/HELP_COMMANDS.md)**
@@ -149,12 +158,16 @@ Base path: `/api/v1`
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/health` | Health check |
-| `POST` | `/translations` | Create a single translation key; triggers AI generation for all locales |
-| `POST` | `/translations/bulk` | Bulk-create up to 50 keys (best-effort, returns per-key results) |
-| `GET` | `/translations` | List translations grouped by key; filter by `market_code`, `market_id`, `locale_code`, `environment` |
-| `PUT` | `/translations/{id}` | Partially update a translation (value, context, status); increments version |
-| `POST` | `/translations/{id}/approve` | Approve a translation; creates version and audit log entry |
-| `POST` | `/translations/{id}/reject` | Reject with optional corrected value; stored for AI feedback loop |
+| `GET` | `/languages` | List all available locales |
+| `GET` | `/translations` | List translations with optional filters (locale, type, label) |
+| `POST` | `/translations` | Create a single translation (upsert) |
+| `POST` | `/translations/bulk` | Bulk-create translations (up to 50 items) |
+| `PUT` | `/translations/{id}` | Update a translation by ID |
+| `PUT` | `/translations` | Update a translation by label + language_code |
+| `POST` | `/ai-translate` | AI translate labels across target locales (sync/async) |
+| `GET` | `/batch/{batch_id}/status` | Check async batch status |
+| `POST` | `/translations/upload` | Upload CSV/JSON file for bulk import |
+| `GET` | `/translations/download` | Download all translations as CSV or JSON |
 
 Interactive docs available at `http://localhost:8000/docs` when the server is running.
 
@@ -162,36 +175,55 @@ Interactive docs available at `http://localhost:8000/docs` when the server is ru
 
 ## MCP Tools
 
-Connect via the MCP server (`python -m src.mcp.server`) and use these tools in natural language:
+The MCP server provides two workflow modes for managing translations:
 
-| Tool | Description |
-|---|---|
-| `ping` | Health check — verify the MCP server is reachable |
-| `get_translations` | Fetch translations for a market/locale/environment |
-| `add_translation` | Create a single key and trigger AI generation |
-| `add_translations_bulk` | Create up to 50 keys at once |
-| `update_translation` | Edit an existing translation by ID |
-| `approve_translation` | Approve a translation |
-| `reject_translation` | Reject with an optional corrected value |
-| `prepare_translations` | Prepare items for the MCP direct translation flow |
-| `save_translations` | Persist translations directly from the MCP host AI |
+### Mode A: AI API Mode
+Uses REST API endpoints via `ai_translate` tool. AI generates translations and saves them automatically.
 
-### VS Code MCP configuration
+**Available capabilities:**
+1. List languages
+2. View translations
+3. Add translations (AI generates for selected locales, sync ≤10 items, async >10 items)
+4. Check batch status
+5. Update translation
 
-Add this to your VS Code MCP settings (`mcp_client/mcp_client_setup.json` for reference):
+### Mode B: MCP Tool Mode
+Uses IDE AI for translation generation. User reviews translations before saving via `create_translation` tool.
+
+**Available capabilities:**
+1. List languages
+2. View translations
+3. Add translations (IDE AI translates, user reviews, then saves)
+4. Update translation
+5. Process translation file (attach CSV/JSON, batch-by-batch review and save)
+6. Download translations (export as CSV or JSON)
+
+### MCP Tools Reference
+
+| Tool | Description | Available In |
+|---|---|---|
+| `ping` | Health check — verify the MCP server is reachable | Both modes |
+| `list_languages` | List all available locales (en, hi_IND, etc.) | Both modes |
+| `get_translations` | Fetch translations with optional filters (locale, type, label) | Both modes |
+| `create_translation` | Bulk upsert translations (array of {label, language_code, translation, type}) | Tool mode |
+| `update_translation` | Update a translation by ID or by label + language_code | Both modes |
+| `ai_translate` | AI translate labels across target locales (sync ≤10 items, async >10 items) | API mode |
+| `get_batch_status` | Check async AI translation batch status | API mode |
+| `download_translations` | Download all translations as CSV (default) or JSON | Tool mode |
+
+### MCP Server Configuration
+
+The MCP server runs on SSE transport at `http://localhost:8002/sse` by default.
+
+For Windsurf/VS Code integration, see `mcp_client/.windsurfrules` for the complete workflow guide.
+
+**Example configuration:**
 
 ```json
 {
   "mcpServers": {
-    "translation-mcp-server": {
-      "type": "stdio",
-      "command": "/path/to/.venv/bin/python",
-      "args": ["-m", "src.mcp.server"],
-      "cwd": "/path/to/translation-mcp-server",
-      "env": {
-        "DB_URL": "postgresql+asyncpg://...",
-        "OPENAI_API_KEY": "sk-..."
-      }
+    "translation-mcp-server-sse": {
+      "url": "http://localhost:8002/sse"
     }
   }
 }
