@@ -45,6 +45,10 @@ REQUIREMENTS (strict):
 12) Preserve HTML/Markdown tags exactly — do not translate or modify tags/attributes; translate only visible text.
 13) Translate all text including brand names and product names. Only preserve text wrapped in curly braces {} as placeholders.
 14) When text contains placeholders, translate ALL surrounding text - only keep the placeholder itself unchanged. Example: "Hi {name}" → "नमस्ते {name}"
+15) CRITICAL: ALWAYS translate text even if it contains special characters (+, -, *, #, @, etc.). 
+    Special characters that are NOT inside curly braces {} or HTML tags MUST be kept in the translation.
+    Example: "About Club+" → "क्लब+ के बारे में" (translate text, keep + symbol)
+    DO NOT confuse special characters with placeholders {} or HTML tags <>.
 
 OUTPUT SCHEMA (each element in the returned array):
 {

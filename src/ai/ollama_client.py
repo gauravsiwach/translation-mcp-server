@@ -88,7 +88,14 @@ async def generate_translation(
 
     # Build prompt same as OpenAI path: system_prompt preamble + user content
     prompt_text = system_prompt + "\n\nINPUT:\n" + (prompt or "")
-    payload = {"model": model, "prompt": prompt_text, "stream": False}
+    payload = {
+        "model": model,
+        "prompt": prompt_text,
+        "stream": False,
+        "options": {
+            "temperature": 0.0  # Deterministic output for consistent translations
+        }
+    }
 
     logger.info(
         "ollama_request.prepared",
@@ -99,7 +106,7 @@ async def generate_translation(
     )
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=settings.AI_TIMEOUT) as client:
             r = await client.post(f"{base}/api/generate", json=payload)
             r.raise_for_status()
             data = r.json()

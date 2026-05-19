@@ -178,7 +178,6 @@ async def generate_translation(
     system_prompt: str,
     *,
     provider: Optional[str] = None,
-    timeout: int = 10,
     purpose: Optional[str] = None,
     promotion_key: Optional[str] = None,
     key: Optional[str] = None,
@@ -201,7 +200,6 @@ async def generate_translation(
     return await generate_translations_bulk(
         [item],
         provider=provider,
-        timeout=float(timeout),
         system_prompt=system_prompt,
         feedback_context=feedback_context,
     )
@@ -211,7 +209,6 @@ async def generate_translations_bulk(
     items: List[Dict[str, Any]],
     *,
     provider: Optional[str] = None,
-    timeout: float = 30.0,
     system_prompt: Optional[str] = None,
     feedback_context: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
@@ -242,11 +239,7 @@ async def generate_translations_bulk(
 
     start = time.time()
     try:
-        coro = client.generate_translation(prompt, "bulk", "", active_prompt)
-        resp = await asyncio.wait_for(coro, timeout=timeout)
-    except asyncio.TimeoutError:
-        logger.exception("ai_bulk_call_timeout", chunk_size=len(items), timeout=timeout)
-        raise AIClientError("ai bulk call timed out")
+        resp = await client.generate_translation(prompt, "bulk", "", active_prompt)
     except Exception as exc:
         logger.exception("ai_bulk_call_failed", chunk_size=len(items))
         raise AIClientError("ai bulk call failed") from exc

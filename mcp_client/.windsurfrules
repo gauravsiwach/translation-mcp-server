@@ -517,6 +517,26 @@ When user attaches a translation file in Tool mode:
    - If any batch failed, show error details
    ```
 
+### Download Workflow
+
+When user requests to download translations:
+
+1. **Ask for format (if not specified):**
+   ```
+   "Which format would you like? CSV (default) or JSON?"
+   ```
+
+2. **Call download_translations tool:**
+   ```
+   - If user specifies format: download_translations(format="csv") or download_translations(format="json")
+   - If user doesn't specify: download_translations(format="csv")  # default to CSV
+   ```
+
+3. **Save file and confirm:**
+   ```
+   "✓ Downloaded translations_all.csv (X KB, Y translations)"
+   ```
+
 ### Example Interaction
 
 **User:** "Process this translation file" [attaches translations.csv]

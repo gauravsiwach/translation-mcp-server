@@ -278,7 +278,6 @@ async def ai_translate(
                 source_text,
                 target_language_codes,
                 market_code="IN",
-                timeout=30,
                 purpose="direct_translation",
                 key=label,
                 system_prompt=None,
@@ -373,7 +372,6 @@ async def ai_translate(
                         ai_results = await generate_translations_bulk(
                             ai_items,
                             provider=None,
-                            timeout=120.0,
                             system_prompt=None,
                         )
                         
@@ -458,7 +456,6 @@ async def ai_translate(
         ai_results = await generate_translations_bulk(
             ai_items,
             provider=None,
-            timeout=60.0,
             system_prompt=None,
         )
         

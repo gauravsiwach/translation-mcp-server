@@ -31,7 +31,7 @@ async def generate_translation(prompt: str, locale_code: Union[str, List[str]], 
         raise RuntimeError("openai package not installed or not importable")
 
     model = getattr(settings, "AI_MODEL", "gpt-4o-mini")
-    timeout = getattr(settings, "OPENAI_TIMEOUT", 15)
+    timeout = getattr(settings, "AI_TIMEOUT", 30)
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -50,8 +50,9 @@ async def generate_translation(prompt: str, locale_code: Union[str, List[str]], 
             resp = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=0.2,
+                temperature=0.0,  # Deterministic output for consistent translations
                 max_tokens=800,
+                timeout=timeout,
             )
             logger.debug("openai_client.response_received")
             return resp
