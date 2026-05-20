@@ -5,6 +5,7 @@ Run with: `python -m src.mcp.server`
 import sys
 import os
 import logging
+import structlog
 import traceback
 
 from mcp.server.fastmcp import FastMCP
@@ -30,15 +31,22 @@ except ImportError:
 
 LOG_FILE = os.path.join(os.path.dirname(__file__), "mcp.log")
 
-logger = logging.getLogger("mcp")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
-    fh.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%Y-%m-%d %H:%M:%S"))
-    sh = logging.StreamHandler(sys.stderr)
-    sh.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%Y-%m-%d %H:%M:%S"))
-    logger.addHandler(fh)
-    logger.addHandler(sh)
+# Configure structlog to write to both file and console (same as REST API)
+try:
+    from utils.logger import configure_logging_with_file
+    configure_logging_with_file(LOG_FILE)
+except ImportError:
+    # Fallback to basic logging if utils.logger not available
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_FILE, encoding="utf-8"),
+            logging.StreamHandler(sys.stderr)
+        ]
+    )
+
+logger = structlog.get_logger("mcp")
 
 
 def log(msg: str) -> None:

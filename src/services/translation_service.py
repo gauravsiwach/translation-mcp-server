@@ -1044,6 +1044,7 @@ async def save_direct_translations(session, translations: List[Dict[str, Any]], 
     """Save direct MCP translations in a single transaction.
 
     Each translation dict must include: key, market_code, default_text, locale_code, value
+    Optional figma fields: figma_file_key, figma_node_id, figma_screenshot_url
     Returns: {"saved": int, "results": [{key, locale_code, translation_id, status}, ...]}
     """
     performed_by = performed_by or "mcp"
