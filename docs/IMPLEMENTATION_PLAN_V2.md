@@ -527,3 +527,152 @@ async def get_batch_status_endpoint(batch_id: str):
 - **Existing key check**: Asks "update or skip?" for existing keys
 - **Natural language parsing**: Simplified, no market inference needed
 - **Strict tool enforcement**: API mode can't call create_translation, Tool mode can't call ai_translate
+
+---
+
+## Phase 7 — MCP Logging Enhancement
+
+### Overview
+Configure MCP server to use the same structlog setup as REST API, capturing all service layer logs (translation_service, agent, AI clients) and writing to both console and file for debugging.
+
+---
+
+### Step 7a — Add File Handler Support to Logger
+**File:** `src/utils/logger.py`
+
+**Add new function:**
+```python
+def configure_logging_with_file(log_file_path: str = None):
+    """Configure structlog to write to both file and console.
+    
+    Args:
+        log_file_path: Optional path to log file. If provided, logs will be written to this file.
+                      If None, logs only go to console.
+    """
+    level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+    
+    # Setup handlers
+    handlers = [logging.StreamHandler()]  # Always write to console
+    
+    if log_file_path:
+        file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
+        file_handler.setLevel(level)
+        handlers.append(file_handler)
+    
+    # Configure stdlib logging
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+        handlers=handlers
+    )
+    
+    # Configure structlog processors
+    processors = [
+        structlog.threadlocal.merge_threadlocal,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+    ]
+    
+    if settings.APP_ENV.lower() == "production":
+        processors.append(structlog.processors.JSONRenderer())
+    else:
+        processors.append(structlog.dev.ConsoleRenderer())
+    
+    structlog.configure(
+        processors=processors,
+        wrapper_class=structlog.make_filtering_bound_logger(level),
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+```
+
+**Purpose:** Allow MCP server to write logs to both file and console while respecting LOG_LEVEL and APP_ENV from config.
+
+---
+
+### Step 7b — Update MCP Server to Use Structlog
+**File:** `src/mcp/server.py`
+
+**Replace basic logging setup (lines 5-44) with:**
+```python
+import structlog
+
+# Configure structlog to write to both file and console (same as REST API)
+try:
+    from utils.logger import configure_logging_with_file
+    configure_logging_with_file(LOG_FILE)
+except ImportError:
+    # Fallback to basic logging if utils.logger not available
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_FILE, encoding="utf-8"),
+            logging.StreamHandler(sys.stderr)
+        ]
+    )
+
+logger = structlog.get_logger("mcp")
+
+
+def log(msg: str) -> None:
+    logger.info(msg)
+```
+
+**Purpose:** MCP server now uses structlog, capturing all service/AI layer logs that were previously invisible in MCP mode.
+
+---
+
+### Step 7c — Verify MCP Logging
+**Test steps:**
+1. Start MCP server: `python src/mcp/server.py`
+2. Call a translation tool (e.g., `ai_translate`)
+3. Check logs appear in:
+   - Console/stderr (real-time viewing)
+   - `src/mcp/mcp.log` file (persistence)
+4. Verify all service layer logs are captured:
+   - `ollama_request.prepared` / `openai_request.prepared`
+   - `ai_bulk_response_received`
+   - `processing_batch` (if re-added)
+   - DB operations
+   - All structlog logs from service layer
+
+**Expected outcome:**
+- ✅ MCP logs use same format as REST API (pretty console in dev, JSON in production)
+- ✅ All service/AI layer logs captured in MCP mode
+- ✅ Logs written to both console and `mcp.log` file
+- ✅ Respects `LOG_LEVEL` and `APP_ENV` from `.env`
+
+---
+
+## Verification Checklist (Updated)
+
+### Phase 1-5 (Basic Migration)
+- [x] `GET /languages` returns rows from `pepsi_languages`
+- [x] `POST /translations` inserts into `pepsi_translations`
+- [x] `GET /translations?language_code=en` filters correctly
+- [x] `PUT /translations/{id}` updates a row
+- [x] `POST /translations/ai-translate` calls AI and upsert result
+- [x] MCP tools respond via `http://localhost:8001/sse`
+- [ ] `pytest tests/test_smoke.py` passes
+
+### Phase 6 (Bulk & Batch)
+- [x] `POST /translations` with array creates/updates multiple entries (upsert)
+- [x] `POST /translations/ai-translate` with ≤10 items returns sync results
+- [x] `POST /translations/ai-translate` with >10 items returns batch_id (async)
+- [x] `GET /translations/batch/{batch_id}/status` returns batch progress
+- [x] MCP `create_translation` tool accepts array input
+- [x] MCP `ai_translate` tool accepts array input with auto sync/async
+- [x] `.windsurfrules` updated with new tool capabilities
+- [x] Fixed `update_translation` async session issue (greenlet_spawn error)
+- [x] Added `update_translation` by key (label + language_code) capability
+- [x] Refactored REST API to single `PUT /translations` endpoint with query params
+- [x] Schema refactoring: renamed classes (Out → Response, In → Request)
+- [x] Removed old schema files (schemas.py, schemas/bulk.py)
+
+### Phase 7 (MCP Logging)
+- [x] Added `configure_logging_with_file()` to `utils/logger.py`
+- [x] Updated `src/mcp/server.py` to use structlog instead of basic logging
+- [ ] Verify MCP server logs to both console and `mcp.log` file
+- [ ] Verify all service/AI layer logs are captured in MCP mode
