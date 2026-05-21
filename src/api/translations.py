@@ -1,6 +1,7 @@
 from typing import List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, status, Body, UploadFile, File, Form, Query
+from sqlalchemy import select
 from config import settings
 
 from api.schemas.translations import (
@@ -13,8 +14,13 @@ from api.schemas.translations import (
     AITranslateBulkRequest,
     BatchStatusResponse,
     FileUploadResponse,
+    TranslationApproveRequest,
+    TranslationRejectRequest,
+    TranslationHistoryResponse,
+    FeedbackCorrectionResponse,
 )
 from db.session import get_session
+from db.models import PepsiTranslation
 from services.translation_service import (
     list_languages,
     list_translations,
@@ -23,6 +29,14 @@ from services.translation_service import (
     update_translation,
     ai_translate,
     get_batch_status,
+    approve_translation,
+    create_version_history,
+    get_translation_history,
+    rollback_translation,
+)
+from services.feedback_service import (
+    reject_translation,
+    get_feedback_corrections,
 )
 from services.file_service import (
     parse_csv_file,
@@ -56,12 +70,13 @@ async def get_translations(
     language_code: Optional[str] = None,
     type: Optional[str] = None,
     label: Optional[str] = None,
+    status: Optional[str] = None,
 ):
     """List translations with optional filters."""
-    logger.info("get_translations.called", language_code=language_code, type=type, label=label)
+    logger.info("get_translations.called", language_code=language_code, type=type, label=label, status=status)
     try:
         async for session in get_session():
-            results = await list_translations(session, language_code=language_code, type_=type, label=label)
+            results = await list_translations(session, language_code=language_code, type_=type, label=label, status=status)
             logger.info("get_translations.completed", count=len(results))
             return results
     except Exception as exc:
@@ -301,4 +316,120 @@ async def upload_translation_file(
         raise
     except Exception as exc:
         logger.exception("upload_translation_file.failed", exc=str(exc))
+        raise HTTPException(status_code=500, detail="internal server error")
+
+
+# New endpoints for status workflow and feedback correction
+
+@router.post("/translations/{translation_id}/approve", response_model=TranslationResponse)
+async def approve_translation_endpoint(translation_id: int, request: TranslationApproveRequest):
+    """Approve a translation by setting status to APPROVED.
+    
+    If request.label is provided, translation_id is ignored and all translations
+    with that label are approved (bulk approve).
+    """
+    logger.info("approve_translation.called", translation_id=translation_id, performed_by=request.performed_by, label=request.label)
+    try:
+        async for session in get_session():
+            # Bulk approve by label
+            if request.label:
+                stmt = select(PepsiTranslation).where(PepsiTranslation.label == request.label)
+                rows = (await session.execute(stmt)).scalars().all()
+                
+                if not rows:
+                    raise HTTPException(status_code=404, detail=f"No translations found with label: {request.label}")
+                
+                approved = []
+                for row in rows:
+                    result = await approve_translation(session, row.id, request.performed_by)
+                    if result:
+                        approved.append(result)
+                
+                logger.info("approve_translation.bulk_completed", label=request.label, count=len(approved))
+                # Return first approved translation as response (API convention)
+                return approved[0] if approved else None
+            else:
+                # Single translation approval
+                result = await approve_translation(session, translation_id, request.performed_by)
+                if not result:
+                    raise HTTPException(status_code=404, detail="Translation not found")
+                logger.info("approve_translation.completed", translation_id=translation_id)
+                return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("approve_translation.failed", exc=str(exc))
+        raise HTTPException(status_code=500, detail="internal server error")
+
+
+@router.post("/translations/{translation_id}/reject", response_model=TranslationResponse)
+async def reject_translation_endpoint(translation_id: int, request: TranslationRejectRequest):
+    """Reject a translation and optionally create a feedback correction record."""
+    logger.info("reject_translation.called", translation_id=translation_id, performed_by=request.performed_by)
+    try:
+        async for session in get_session():
+            result = await reject_translation(
+                session,
+                translation_id,
+                request.performed_by,
+                request.corrected_value,
+                request.correction_reason
+            )
+            if not result:
+                raise HTTPException(status_code=404, detail="Translation not found")
+            logger.info("reject_translation.completed", translation_id=translation_id)
+            return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("reject_translation.failed", exc=str(exc))
+        raise HTTPException(status_code=500, detail="internal server error")
+
+
+@router.get("/translations/{translation_id}/history", response_model=List[TranslationHistoryResponse])
+async def get_translation_history_endpoint(translation_id: int):
+    """Get version history for a translation."""
+    logger.info("get_translation_history.called", translation_id=translation_id)
+    try:
+        async for session in get_session():
+            result = await get_translation_history(session, translation_id)
+            logger.info("get_translation_history.completed", translation_id=translation_id, count=len(result))
+            return result
+    except Exception as exc:
+        logger.exception("get_translation_history.failed", exc=str(exc))
+        raise HTTPException(status_code=500, detail="internal server error")
+
+
+@router.post("/translations/{translation_id}/rollback/{version_id}", response_model=TranslationResponse)
+async def rollback_translation_endpoint(translation_id: int, version_id: int, performed_by: str = Body(..., embed=True)):
+    """Rollback a translation to a specific version."""
+    logger.info("rollback_translation.called", translation_id=translation_id, version_id=version_id, performed_by=performed_by)
+    try:
+        async for session in get_session():
+            result = await rollback_translation(session, translation_id, version_id, performed_by)
+            if not result:
+                raise HTTPException(status_code=404, detail="Translation or version not found")
+            logger.info("rollback_translation.completed", translation_id=translation_id, version_id=version_id)
+            return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("rollback_translation.failed", exc=str(exc))
+        raise HTTPException(status_code=500, detail="internal server error")
+
+
+@router.get("/feedback-corrections", response_model=List[FeedbackCorrectionResponse])
+async def get_feedback_corrections_endpoint(
+    language_code: Optional[str] = None,
+    limit: int = Query(10, ge=1, le=100)
+):
+    """Get recent feedback corrections for AI improvement."""
+    logger.info("get_feedback_corrections.called", language_code=language_code, limit=limit)
+    try:
+        async for session in get_session():
+            result = await get_feedback_corrections(session, language_code=language_code, limit=limit)
+            logger.info("get_feedback_corrections.completed", count=len(result))
+            return result
+    except Exception as exc:
+        logger.exception("get_feedback_corrections.failed", exc=str(exc))
         raise HTTPException(status_code=500, detail="internal server error")

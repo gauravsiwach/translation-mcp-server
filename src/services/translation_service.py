@@ -4,9 +4,10 @@ from typing import List, Optional, Dict, Any, Union
 from sqlalchemy import select
 import uuid
 
-from db.models import PepsiLanguage, PepsiTranslation
+from db.models import PepsiLanguage, PepsiTranslation, PepsiTranslationVersion, PepsiFeedbackCorrection
 from utils.logger import get_logger
 from config import settings
+from services import feedback_service
 
 logger = get_logger("translation_service")
 
@@ -35,6 +36,7 @@ async def list_translations(
     language_code: Optional[str] = None,
     type_: Optional[str] = None,
     label: Optional[str] = None,
+    status: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List translations with optional filters."""
     stmt = select(PepsiTranslation)
@@ -44,6 +46,8 @@ async def list_translations(
         stmt = stmt.where(PepsiTranslation.type == type_)
     if label:
         stmt = stmt.where(PepsiTranslation.label.ilike(f"%{label}%"))
+    if status:
+        stmt = stmt.where(PepsiTranslation.status == status)
     res = await session.execute(stmt)
     rows = res.scalars().all()
     return [
@@ -53,6 +57,12 @@ async def list_translations(
             "language_code": r.language_code,
             "translation": r.translation,
             "type": r.type,
+            "status": r.status,
+            "figma_node_id": r.figma_node_id,
+            "figma_file_key": r.figma_file_key,
+            "figma_screenshot_url": r.figma_screenshot_url,
+            "created_by": r.created_by,
+            "updated_by": r.updated_by,
             "created_datetime": r.created_datetime,
             "updated_datetime": r.updated_datetime,
         }
@@ -73,6 +83,12 @@ async def get_translation(session, translation_id: int) -> Optional[Dict[str, An
         "language_code": row.language_code,
         "translation": row.translation,
         "type": row.type,
+        "status": row.status,
+        "figma_node_id": row.figma_node_id,
+        "figma_file_key": row.figma_file_key,
+        "figma_screenshot_url": row.figma_screenshot_url,
+        "created_by": row.created_by,
+        "updated_by": row.updated_by,
         "created_datetime": row.created_datetime,
         "updated_datetime": row.updated_datetime,
     }
@@ -93,6 +109,8 @@ async def create_translation(
         language_code = translations.get("language_code")
         translation = translations.get("translation")
         type_ = translations.get("type")
+        status = translations.get("status", "PENDING_REVIEW")
+        created_by = translations.get("created_by")
         
         stmt = select(PepsiTranslation).where(
             PepsiTranslation.label == label,
@@ -101,10 +119,22 @@ async def create_translation(
         existing = (await session.execute(stmt)).scalar_one_or_none()
         if existing:
             raise ValueError(f"Translation already exists: label={label}, language_code={language_code}")
-        row = PepsiTranslation(label=label, language_code=language_code, translation=translation, type=type_)
+        row = PepsiTranslation(
+            label=label, 
+            language_code=language_code, 
+            translation=translation, 
+            type=type_,
+            status=status,
+            created_by=created_by
+        )
         session.add(row)
         await session.flush()
         await session.commit()
+        
+        # Create version history for new translation
+        actual_created_by = created_by or "system"
+        await create_version_history(session, row.id, actual_created_by, "Initial version")
+        
         logger.info("create_translation", id=row.id, label=label, language_code=language_code)
         return {
             "id": row.id,
@@ -112,6 +142,12 @@ async def create_translation(
             "language_code": row.language_code,
             "translation": row.translation,
             "type": row.type,
+            "status": row.status,
+            "figma_node_id": row.figma_node_id,
+            "figma_file_key": row.figma_file_key,
+            "figma_screenshot_url": row.figma_screenshot_url,
+            "created_by": row.created_by,
+            "updated_by": row.updated_by,
             "created_datetime": row.created_datetime,
             "updated_datetime": row.updated_datetime,
         }
@@ -127,6 +163,8 @@ async def create_translation(
             language_code = item.get("language_code")
             translation = item.get("translation")
             type_ = item.get("type")
+            status = item.get("status", "PENDING_REVIEW")
+            created_by = item.get("created_by")
             
             stmt = select(PepsiTranslation).where(
                 PepsiTranslation.label == label,
@@ -138,6 +176,8 @@ async def create_translation(
                 # Update existing
                 existing.translation = translation
                 existing.type = type_ or existing.type
+                existing.status = status or existing.status
+                existing.updated_by = created_by
                 session.add(existing)
                 updated_count += 1
                 results.append({
@@ -146,22 +186,46 @@ async def create_translation(
                     "language_code": existing.language_code,
                     "translation": existing.translation,
                     "type": existing.type,
+                    "status": existing.status,
+                    "figma_node_id": existing.figma_node_id,
+                    "figma_file_key": existing.figma_file_key,
+                    "figma_screenshot_url": existing.figma_screenshot_url,
+                    "created_by": existing.created_by,
+                    "updated_by": existing.updated_by,
                     "action": "updated",
                     "created_datetime": existing.created_datetime,
                     "updated_datetime": existing.updated_datetime,
                 })
             else:
                 # Create new
-                row = PepsiTranslation(label=label, language_code=language_code, translation=translation, type=type_)
+                row = PepsiTranslation(
+                    label=label, 
+                    language_code=language_code, 
+                    translation=translation, 
+                    type=type_,
+                    status=status,
+                    created_by=created_by
+                )
                 session.add(row)
                 await session.flush()
                 created_count += 1
+                
+                # Create version history for new translation
+                actual_created_by = created_by or "system"
+                await create_version_history(session, row.id, actual_created_by, "Initial version")
+                
                 results.append({
                     "id": row.id,
                     "label": row.label,
                     "language_code": row.language_code,
                     "translation": row.translation,
                     "type": row.type,
+                    "status": row.status,
+                    "figma_node_id": row.figma_node_id,
+                    "figma_file_key": row.figma_file_key,
+                    "figma_screenshot_url": row.figma_screenshot_url,
+                    "created_by": row.created_by,
+                    "updated_by": row.updated_by,
                     "action": "created",
                     "created_datetime": row.created_datetime,
                     "updated_datetime": row.updated_datetime,
@@ -186,8 +250,10 @@ async def update_translation(
     language_code: Optional[str] = None,
     translation: Optional[str] = None,
     type_: Optional[str] = None,
+    status: Optional[str] = None,
+    updated_by: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Update translation text and/or type by id OR by label+language_code.
+    """Update translation text, type, status, and audit fields by id OR by label+language_code.
 
     Args:
         translation_id: ID of the translation (if updating by ID)
@@ -195,6 +261,8 @@ async def update_translation(
         language_code: Language code (required if updating by key)
         translation: New translation text
         type_: New type value
+        status: New status value
+        updated_by: User who made the update
 
     Returns:
         Updated translation dict or None if not found
@@ -216,6 +284,21 @@ async def update_translation(
     if not row:
         return None
 
+    # Detect actual content changes
+    content_changes = []
+    if translation is not None and translation != row.translation:
+        content_changes.append("translation")
+    if type_ is not None and type_ != row.type:
+        content_changes.append("type")
+    if status is not None and status != row.status:
+        content_changes.append("status")
+
+    # Create version history before update if there are content changes
+    if content_changes:
+        actual_updated_by = updated_by or "system"
+        change_reason = f"{', '.join(c.capitalize() for c in content_changes)} updated"
+        await create_version_history(session, row.id, actual_updated_by, change_reason)
+
     # Build update statement to avoid async session issues with object modification
     from sqlalchemy import update
     update_values = {}
@@ -223,6 +306,10 @@ async def update_translation(
         update_values["translation"] = translation
     if type_ is not None:
         update_values["type"] = type_
+    if status is not None:
+        update_values["status"] = status
+    if updated_by is not None:
+        update_values["updated_by"] = updated_by
 
     if update_values:
         if translation_id is not None:
@@ -244,6 +331,12 @@ async def update_translation(
         "language_code": row.language_code,
         "translation": row.translation,
         "type": row.type,
+        "status": row.status,
+        "figma_node_id": row.figma_node_id,
+        "figma_file_key": row.figma_file_key,
+        "figma_screenshot_url": row.figma_screenshot_url,
+        "created_by": row.created_by,
+        "updated_by": row.updated_by,
         "created_datetime": row.created_datetime,
         "updated_datetime": row.updated_datetime,
     }
@@ -266,12 +359,33 @@ async def ai_translate(
         target_language_codes = translations.get("target_language_codes")
         type_ = translations.get("type")
         
+        # Validate language codes
+        await validate_language_codes(session, target_language_codes)
+        
         logger.info("ai_translate_start", label=label, target_languages=target_language_codes)
         try:
             from ai.agent import generate_translation
         except Exception as e:
             logger.exception("ai_agent_import_failed", error=str(e))
             raise
+
+        # Retrieve feedback corrections for target languages
+        feedback_context_parts = []
+        if isinstance(target_language_codes, list):
+            for lang_code in target_language_codes:
+                context = await feedback_service.get_feedback_corrections_for_ai(
+                    session, lang_code, settings.FEEDBACK_CORRECTION_LIMIT
+                )
+                if context:
+                    feedback_context_parts.append(context)
+        elif isinstance(target_language_codes, str):
+            context = await feedback_service.get_feedback_corrections_for_ai(
+                session, target_language_codes, settings.FEEDBACK_CORRECTION_LIMIT
+            )
+            if context:
+                feedback_context_parts.append(context)
+        
+        feedback_context = "\n\n".join(feedback_context_parts) if feedback_context_parts else None
 
         try:
             ai_results = await generate_translation(
@@ -281,6 +395,7 @@ async def ai_translate(
                 purpose="direct_translation",
                 key=label,
                 system_prompt=None,
+                feedback_context=feedback_context,
             )
             logger.info("ai_translate_result", label=label, result=ai_results)
         except Exception as e:
@@ -325,6 +440,29 @@ async def ai_translate(
     # Handle array input (batch processing)
     if isinstance(translations, list):
         total_items = len(translations)
+        
+        # Collect all unique target language codes
+        all_target_languages = set()
+        for item in translations:
+            target_langs = item.get("target_language_codes", [])
+            if isinstance(target_langs, list):
+                all_target_languages.update(target_langs)
+            elif isinstance(target_langs, str):
+                all_target_languages.add(target_langs)
+        
+        # Validate all language codes
+        await validate_language_codes(session, list(all_target_languages))
+        
+        # Retrieve feedback corrections for all target languages
+        feedback_context_parts = []
+        for lang_code in all_target_languages:
+            context = await feedback_service.get_feedback_corrections_for_ai(
+                session, lang_code, settings.FEEDBACK_CORRECTION_LIMIT
+            )
+            if context:
+                feedback_context_parts.append(context)
+        
+        feedback_context = "\n\n".join(feedback_context_parts) if feedback_context_parts else None
         
         # Async mode for >AI_BATCH_SIZE items
         if total_items > settings.AI_BATCH_SIZE:
@@ -373,6 +511,7 @@ async def ai_translate(
                             ai_items,
                             provider=None,
                             system_prompt=None,
+                            feedback_context=feedback_context,
                         )
                         
                         # Upsert results
@@ -457,6 +596,7 @@ async def ai_translate(
             ai_items,
             provider=None,
             system_prompt=None,
+            feedback_context=feedback_context,
         )
         
         # Upsert results
@@ -507,3 +647,226 @@ async def ai_translate(
 async def get_batch_status(batch_id: str) -> Optional[Dict[str, Any]]:
     """Lookup batch status by ID."""
     return batch_status.get(batch_id)
+
+
+async def validate_language_codes(session, language_codes: Union[str, List[str]]) -> List[str]:
+    """Validate that language codes exist in pepsi_languages table.
+    
+    Args:
+        session: Database session
+        language_codes: Single language code or list of language codes
+        
+    Returns:
+        List of valid language codes
+        
+    Raises:
+        ValueError: If any language code is not found in pepsi_languages
+    """
+    if isinstance(language_codes, str):
+        language_codes = [language_codes]
+    
+    # Get all valid language codes from pepsi_languages
+    stmt = select(PepsiLanguage.language_code)
+    valid_codes = (await session.execute(stmt)).scalars().all()
+    valid_codes_set = set(valid_codes)
+    
+    # Check if all requested language codes are valid
+    invalid_codes = [code for code in language_codes if code not in valid_codes_set]
+    
+    if invalid_codes:
+        raise ValueError(f"Invalid language codes: {invalid_codes}. Valid codes: {sorted(valid_codes)}")
+    
+    return language_codes
+
+
+async def approve_translation(
+    session,
+    translation_id: int,
+    performed_by: str,
+) -> Optional[Dict[str, Any]]:
+    """Approve a translation by setting status to APPROVED.
+    
+    Args:
+        translation_id: ID of the translation to approve
+        performed_by: User who approved the translation
+        
+    Returns:
+        Updated translation dict or None if not found
+    """
+    from sqlalchemy import update
+    
+    stmt = select(PepsiTranslation).where(PepsiTranslation.id == translation_id)
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if not row:
+        return None
+    
+    # Create version history before approving
+    await create_version_history(session, translation_id, performed_by, "Status changed to APPROVED")
+    
+    update_stmt = update(PepsiTranslation).where(PepsiTranslation.id == translation_id).values(
+        status="APPROVED",
+        updated_by=performed_by
+    )
+    await session.execute(update_stmt)
+    await session.commit()
+    await session.refresh(row)
+    
+    logger.info("approve_translation", id=translation_id, performed_by=performed_by)
+    return {
+        "id": row.id,
+        "label": row.label,
+        "language_code": row.language_code,
+        "translation": row.translation,
+        "type": row.type,
+        "status": row.status,
+        "figma_node_id": row.figma_node_id,
+        "figma_file_key": row.figma_file_key,
+        "figma_screenshot_url": row.figma_screenshot_url,
+        "created_by": row.created_by,
+        "updated_by": row.updated_by,
+        "created_datetime": row.created_datetime,
+        "updated_datetime": row.updated_datetime,
+    }
+
+
+async def create_version_history(
+    session,
+    translation_id: int,
+    changed_by: str,
+    change_reason: Optional[str] = None,
+) -> None:
+    """Manually create a version history entry for a translation.
+    
+    Args:
+        translation_id: ID of the translation to snapshot
+        changed_by: User who made the change
+        change_reason: Optional reason for the change (auto-generated if not provided)
+    """
+    stmt = select(PepsiTranslation).where(PepsiTranslation.id == translation_id)
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if not row:
+        raise ValueError(f"Translation not found: id={translation_id}")
+    
+    version = PepsiTranslationVersion(
+        translation_id=translation_id,
+        label=row.label,
+        translation=row.translation,
+        type=row.type,
+        status=row.status,
+        changed_by=changed_by,
+        change_reason=change_reason,
+    )
+    session.add(version)
+    await session.flush()
+    
+    # Update main table's version column to point to this version
+    row.version = version.id
+    session.add(row)
+    
+    await session.commit()
+    
+    logger.info("create_version_history", translation_id=translation_id, changed_by=changed_by, change_reason=change_reason)
+
+
+async def get_translation_history(
+    session,
+    translation_id: int,
+) -> List[Dict[str, Any]]:
+    """Get version history for a translation.
+    
+    Args:
+        translation_id: ID of the translation
+        
+    Returns:
+        List of historical versions ordered by created_at DESC
+    """
+    stmt = select(PepsiTranslationVersion).where(
+        PepsiTranslationVersion.translation_id == translation_id
+    ).order_by(PepsiTranslationVersion.created_at.desc())
+    
+    res = await session.execute(stmt)
+    rows = res.scalars().all()
+    
+    return [
+        {
+            "id": r.id,
+            "translation_id": r.translation_id,
+            "label": r.label,
+            "translation": r.translation,
+            "type": r.type,
+            "status": r.status,
+            "changed_by": r.changed_by,
+            "change_reason": r.change_reason,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
+
+async def rollback_translation(
+    session,
+    translation_id: int,
+    version_id: int,
+    performed_by: str,
+) -> Optional[Dict[str, Any]]:
+    """Rollback a translation to a specific version.
+    
+    Args:
+        translation_id: ID of the translation to rollback
+        version_id: ID of the version to rollback to
+        performed_by: User who performed the rollback
+        
+    Returns:
+        Updated translation dict or None if not found
+    """
+    from sqlalchemy import update
+    
+    # Get the version to rollback to
+    stmt = select(PepsiTranslationVersion).where(
+        PepsiTranslationVersion.id == version_id,
+        PepsiTranslationVersion.translation_id == translation_id
+    )
+    version_row = (await session.execute(stmt)).scalar_one_or_none()
+    if not version_row:
+        return None
+    
+    # Get current translation
+    stmt = select(PepsiTranslation).where(PepsiTranslation.id == translation_id)
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if not row:
+        return None
+    
+    # Create version history before rollback
+    await create_version_history(session, translation_id, performed_by, f"Rolled back to version {version_id}")
+    
+    # Update main table with version data
+    update_stmt = update(PepsiTranslation).where(PepsiTranslation.id == translation_id).values(
+        translation=version_row.translation,
+        type=version_row.type,
+        status=version_row.status,
+        updated_by=performed_by,
+        version=version_id,
+    )
+    await session.execute(update_stmt)
+    await session.commit()
+    await session.refresh(row)
+    
+    logger.info("rollback_translation", translation_id=translation_id, version_id=version_id, performed_by=performed_by)
+    return {
+        "id": row.id,
+        "label": row.label,
+        "language_code": row.language_code,
+        "translation": row.translation,
+        "type": row.type,
+        "status": row.status,
+        "figma_node_id": row.figma_node_id,
+        "figma_file_key": row.figma_file_key,
+        "figma_screenshot_url": row.figma_screenshot_url,
+        "created_by": row.created_by,
+        "updated_by": row.updated_by,
+        "created_datetime": row.created_datetime,
+        "updated_datetime": row.updated_datetime,
+    }
+
+
+

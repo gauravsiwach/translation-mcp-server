@@ -20,6 +20,12 @@ class TranslationResponse(BaseModel):
     language_code: str
     translation: str
     type: Optional[str] = None
+    status: Optional[str] = None
+    figma_node_id: Optional[str] = None
+    figma_file_key: Optional[str] = None
+    figma_screenshot_url: Optional[str] = None
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
     created_datetime: Optional[datetime] = None
     updated_datetime: Optional[datetime] = None
 
@@ -39,11 +45,18 @@ class TranslationCreateRequest(BaseModel):
     language_code: str = Field(..., min_length=1)
     translation: str = Field(..., min_length=1)
     type: Optional[str] = None
+    status: Optional[str] = None
+    created_by: Optional[str] = None
+    figma_node_id: Optional[str] = None
+    figma_file_key: Optional[str] = None
+    figma_screenshot_url: Optional[str] = None
 
 
 class TranslationUpdateRequest(BaseModel):
     translation: Optional[str] = None
     type: Optional[str] = None
+    status: Optional[str] = None
+    updated_by: Optional[str] = None
 
     @classmethod
     def as_optional_update(cls):
@@ -80,3 +93,45 @@ class FileUploadResponse(BaseModel):
 class FileValidationError(BaseModel):
     error: str
     details: Optional[Dict[str, Any]] = None
+
+
+# New schemas for status workflow and feedback correction
+class TranslationApproveRequest(BaseModel):
+    performed_by: str = Field(..., min_length=1)
+    label: Optional[str] = None  # If provided, approve all locales for this label
+
+
+class TranslationRejectRequest(BaseModel):
+    corrected_value: Optional[str] = None
+    correction_reason: Optional[str] = None
+    performed_by: str = Field(..., min_length=1)
+
+
+class TranslationHistoryResponse(BaseModel):
+    id: int
+    translation_id: int
+    label: Optional[str] = None
+    translation: Optional[str] = None
+    type: Optional[str] = None
+    status: Optional[str] = None
+    changed_by: Optional[str] = None
+    change_reason: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class FeedbackCorrectionResponse(BaseModel):
+    id: int
+    translation_id: Optional[int] = None
+    label: str
+    language_code: str
+    ai_original_value: Optional[str] = None
+    corrected_value: Optional[str] = None
+    correction_reason: Optional[str] = None
+    corrected_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

@@ -21,12 +21,14 @@ source .venv/bin/activate
 
 ## Step 2 — Run Migrations (first time or after model changes)
 
+**Important:** Since `alembic.ini` is in the `alembic/` directory, use the `-c` flag:
+
 ```bash
 # Generate a new migration file from model changes
-alembic revision --autogenerate -m "description of change"
+alembic -c alembic/alembic.ini revision --autogenerate -m "description of change"
 
 # Apply all pending migrations to the DB
-alembic upgrade head
+alembic -c alembic/alembic.ini upgrade head
 ```
 
 ---

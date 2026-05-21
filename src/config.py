@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     SOURCE_LANGUAGE: str = "en"
     MAX_FILE_SIZE_MB: int = 10
     AI_BATCH_SIZE: int = 10
+    # Feedback corrections settings
+    FEEDBACK_CORRECTION_LIMIT: int = 10
 
     model_config = {
         "env_file": ENV_FILE,

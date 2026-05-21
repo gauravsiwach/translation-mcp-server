@@ -38,6 +38,11 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 >    - **>10 items** — async mode (returns batch_id, check status later)
 > 4. **Check batch status** — poll async batch progress by batch_id
 > 5. **Update translation** — modify existing translation by ID
+> 6. **Approve translation** — approve a translation by ID or bulk approve by label
+> 7. **Reject translation** — reject a translation and optionally create feedback correction
+> 8. **View version history** — see all versions of a translation
+> 9. **Rollback translation** — revert a translation to a previous version
+> 10. **View feedback corrections** — see recent feedback corrections for AI improvement
 >
 > What would you like to do?"
 
@@ -49,6 +54,11 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 > 4. **Update translation** — modify existing translation by ID
 > 5. **Process translation file** — attach CSV/JSON file to bulk import/update translations
 > 6. **Download translations** — export all translations as CSV or JSON
+> 7. **Approve translation** — approve a translation by ID or bulk approve by label
+> 8. **Reject translation** — reject a translation and optionally create feedback correction
+> 9. **View version history** — see all versions of a translation
+> 10. **Rollback translation** — revert a translation to a previous version
+> 11. **View feedback corrections** — see recent feedback corrections for AI improvement
 >
 > What would you like to do?"
 
@@ -151,7 +161,8 @@ When in **API mode**, use the `ai_translate` tool for adding translations.
 1. **Collect information:**
    - User provides label + source text (e.g., "add basket.total with text 'Total'")
    - Call `list_languages` to get available locales
-   - Ask user: "Which locales do you want? (default: all - en, hi_IND)"
+   - **Automatically use all available locales** (e.g., en, hi_IND)
+   - Show user: "I'll translate for all available locales: en, hi_IND"
 
 2. **Check existing keys:**
    - Call `get_translations` with `label` filter to check if key exists
@@ -212,9 +223,10 @@ When in **Tool mode**, use the `create_translation` tool for adding translations
 ### Adding translations (Tool mode)
 
 1. **Collect information:**
-   - User provides label + value (e.g., "add basket.total as 'Total' in English and 'कुल' in Hindi")
+   - User provides label + value (e.g., "add basket.total as 'Total'")
    - Call `list_languages` to get available locales
-   - Ask user: "Which locales do you want? (default: all - en, hi_IND)"
+   - **Automatically use all available locales** (e.g., en, hi_IND)
+   - Show user: "I'll translate for all available locales: en, hi_IND"
 
 2. **Check existing keys:**
    - Call `get_translations` with `label` filter to check if key exists
@@ -616,6 +628,115 @@ Example response:
 }
 ```
 
+### approve_translation
+**When:** user wants to approve a translation (by ID or bulk by label)
+**Required:** `translation_id`
+**Optional:** `performed_by` (defaults to "system_user" in MCP mode), `label` (for bulk approval - approves all locales for this label)
+**Returns:** The approved translation dict
+
+Example call (single):
+```json
+{
+  "translation_id": 1
+}
+```
+
+Example call (bulk):
+```json
+{
+  "translation_id": 1,
+  "label": "basket.total"
+}
+```
+
+### reject_translation
+**When:** user wants to reject a translation and optionally create feedback correction
+**Required:** `translation_id`
+**Optional:** `performed_by` (defaults to "system_user" in MCP mode), `corrected_value`, `correction_reason`
+**Returns:** The updated translation dict
+
+Example call:
+```json
+{
+  "translation_id": 1,
+  "corrected_value": "Corrected translation",
+  "correction_reason": "Typo fixed"
+}
+```
+
+### get_translation_history
+**When:** user wants to see version history for a translation
+**Required:** `translation_id`
+**Returns:** Array of version history dicts
+
+Example call:
+```json
+{
+  "translation_id": 1
+}
+```
+
+Example response:
+```json
+[
+  {
+    "id": 1,
+    "translation_id": 1,
+    "label": "basket.total",
+    "translation": "Total",
+    "type": "ui",
+    "status": "APPROVED",
+    "changed_by": "user123",
+    "change_reason": "Status changed to APPROVED",
+    "created_at": "2026-05-21T12:00:00"
+  }
+]
+```
+
+### get_feedback_corrections
+**When:** user wants to see recent feedback corrections for AI improvement
+**Optional:** `language_code`, `limit` (default: 10)
+**Returns:** Array of feedback correction dicts
+
+Example call:
+```json
+{
+  "language_code": "hi",
+  "limit": 10
+}
+```
+
+Example response:
+```json
+[
+  {
+    "id": 1,
+    "translation_id": 1,
+    "label": "basket.total",
+    "language_code": "hi",
+    "ai_original_value": "कुल",
+    "corrected_value": "समग्र",
+    "correction_reason": "More accurate",
+    "corrected_by": "user123",
+    "created_at": "2026-05-21T12:00:00"
+  }
+]
+```
+
+### rollback_translation
+**When:** user wants to revert a translation to a previous version
+**Required:** `translation_id`, `version_id`, `performed_by`
+**Returns:** The updated translation dict
+
+Example call:
+```json
+{
+  "translation_id": 1,
+  "version_id": 1,
+  "performed_by": "user123"
+}
+```
+
 ---
 
 ## Strict operating rules
@@ -624,7 +745,7 @@ Example response:
 2. **Never call without confirmation** — Always show plan first and wait for approval
 3. **Ask, don't assume** — If missing info, ask for it one question at a time
 4. **Only these MCP tools exist:**
-   - **Common:** `list_languages`, `get_translations`, `update_translation`
+   - **Common:** `list_languages`, `get_translations`, `update_translation`, `approve_translation`, `reject_translation`, `get_translation_history`, `get_feedback_corrections`, `rollback_translation`
    - **API mode only:** `ai_translate`, `get_batch_status`
    - **Tool mode only:** `create_translation`
 5. **Mode-specific tools:**

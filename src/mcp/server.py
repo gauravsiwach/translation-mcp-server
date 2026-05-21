@@ -81,7 +81,7 @@ def main() -> None:
     log(f"MCP server starting... log: {LOG_FILE}")
     # mcp.run(transport="stdio")
     mcp.settings.host = "0.0.0.0"
-    mcp.settings.port = 8002
+    mcp.settings.port = 8001
     mcp.run(transport="sse")
    
 

@@ -215,3 +215,181 @@ def register(mcp, log) -> None:
         except Exception as exc:
             log(f"download_translations_error: {exc}")
             return {"error": str(exc)}
+
+    @mcp.tool()
+    async def approve_translation(
+        translation_id: int,
+        performed_by: str = "system_user",
+        label: Optional[str] = None,
+    ) -> dict:
+        """Approve a translation by setting status to APPROVED.
+        
+        Args:
+            translation_id: ID of the translation to approve
+            performed_by: User who approved the translation (defaults to "system_user")
+            label: Optional label for bulk approval (approves all locales for this label)
+            
+        Returns the approved translation dict.
+        If label is provided, returns the first approved translation.
+        On error returns an error dict.
+        """
+        log(f"mcp.approve_translation called translation_id={translation_id} performed_by={performed_by} label={label}")
+
+        from db.session import get_session
+        from services.translation_service import approve_translation
+
+        try:
+            async for session in get_session():
+                # Bulk approve by label
+                if label:
+                    from sqlalchemy import select
+                    from db.models import PepsiTranslation
+                    
+                    stmt = select(PepsiTranslation).where(PepsiTranslation.label == label)
+                    rows = (await session.execute(stmt)).scalars().all()
+                    
+                    if not rows:
+                        return {"error": f"No translations found with label: {label}"}
+                    
+                    approved = []
+                    for row in rows:
+                        result = await approve_translation(session, row.id, performed_by)
+                        if result:
+                            approved.append(result)
+                    
+                    log(f"approve_translation bulk completed label={label} count={len(approved)}")
+                    return approved[0] if approved else {"error": "No translations approved"}
+                else:
+                    # Single translation approval
+                    result = await approve_translation(session, translation_id, performed_by)
+                    if not result:
+                        return {"error": "Translation not found"}
+                    log(f"approve_translation completed translation_id={translation_id}")
+                    return result
+        except Exception as exc:
+            log(f"approve_translation_error: {exc}")
+            return {"error": str(exc)}
+
+    @mcp.tool()
+    async def reject_translation(
+        translation_id: int,
+        performed_by: str = "system_user",
+        corrected_value: Optional[str] = None,
+        correction_reason: Optional[str] = None,
+    ) -> dict:
+        """Reject a translation and optionally create a feedback correction record.
+        
+        Args:
+            translation_id: ID of the translation to reject
+            performed_by: User who rejected the translation (defaults to "system_user")
+            corrected_value: Optional corrected translation value
+            correction_reason: Optional reason for rejection/correction
+            
+        Returns the updated translation dict.
+        On error returns an error dict.
+        """
+        log(f"mcp.reject_translation called translation_id={translation_id} performed_by={performed_by}")
+
+        from db.session import get_session
+        from services.feedback_service import reject_translation
+
+        try:
+            async for session in get_session():
+                result = await reject_translation(
+                    session,
+                    translation_id,
+                    performed_by,
+                    corrected_value,
+                    correction_reason
+                )
+                if not result:
+                    return {"error": "Translation not found"}
+                log(f"reject_translation completed translation_id={translation_id}")
+                return result
+        except Exception as exc:
+            log(f"reject_translation_error: {exc}")
+            return {"error": str(exc)}
+
+    @mcp.tool()
+    async def get_translation_history(translation_id: int) -> List[dict]:
+        """Get version history for a translation.
+        
+        Args:
+            translation_id: ID of the translation
+            
+        Returns a list of version history dicts with id, translation_id, label, translation, type, status, changed_by, change_reason, created_at.
+        On error returns a single-element list with an error dict.
+        """
+        log(f"mcp.get_translation_history called translation_id={translation_id}")
+
+        from db.session import get_session
+        from services.translation_service import get_translation_history
+
+        try:
+            async for session in get_session():
+                result = await get_translation_history(session, translation_id)
+                log(f"get_translation_history completed translation_id={translation_id} count={len(result)}")
+                return result
+        except Exception as exc:
+            log(f"get_translation_history_error: {exc}")
+            return [{"error": str(exc)}]
+
+    @mcp.tool()
+    async def get_feedback_corrections(
+        language_code: Optional[str] = None,
+        limit: int = 10,
+    ) -> List[dict]:
+        """Get recent feedback corrections for AI improvement.
+        
+        Args:
+            language_code: Optional filter by language code
+            limit: Maximum number of corrections to return (default: 10)
+            
+        Returns a list of feedback correction dicts with id, translation_id, label, language_code, ai_original_value, corrected_value, correction_reason, corrected_by, created_at.
+        On error returns a single-element list with an error dict.
+        """
+        log(f"mcp.get_feedback_corrections called language_code={language_code} limit={limit}")
+
+        from db.session import get_session
+        from services.feedback_service import get_feedback_corrections
+
+        try:
+            async for session in get_session():
+                result = await get_feedback_corrections(session, language_code=language_code, limit=limit)
+                log(f"get_feedback_corrections completed count={len(result)}")
+                return result
+        except Exception as exc:
+            log(f"get_feedback_corrections_error: {exc}")
+            return [{"error": str(exc)}]
+
+    @mcp.tool()
+    async def rollback_translation(
+        translation_id: int,
+        version_id: int,
+        performed_by: str = "system_user",
+    ) -> dict:
+        """Rollback a translation to a specific version.
+        
+        Args:
+            translation_id: ID of the translation to rollback
+            version_id: ID of the version to rollback to
+            performed_by: User who performed the rollback (defaults to "system_user")
+            
+        Returns the updated translation dict.
+        On error returns an error dict.
+        """
+        log(f"mcp.rollback_translation called translation_id={translation_id} version_id={version_id}")
+
+        from db.session import get_session
+        from services.translation_service import rollback_translation
+
+        try:
+            async for session in get_session():
+                result = await rollback_translation(session, translation_id, version_id, performed_by)
+                if not result:
+                    return {"error": "Translation or version not found"}
+                log(f"rollback_translation completed translation_id={translation_id} version_id={version_id}")
+                return result
+        except Exception as exc:
+            log(f"rollback_translation_error: {exc}")
+            return {"error": str(exc)}
