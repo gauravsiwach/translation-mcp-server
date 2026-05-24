@@ -311,30 +311,6 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
-    async def get_translation_history(translation_id: int) -> List[dict]:
-        """Get version history for a translation.
-        
-        Args:
-            translation_id: ID of the translation
-            
-        Returns a list of version history dicts with id, translation_id, label, translation, type, status, changed_by, change_reason, created_at.
-        On error returns a single-element list with an error dict.
-        """
-        log(f"mcp.get_translation_history called translation_id={translation_id}")
-
-        from db.session import get_session
-        from services.translation_service import get_translation_history
-
-        try:
-            async for session in get_session():
-                result = await get_translation_history(session, translation_id)
-                log(f"get_translation_history completed translation_id={translation_id} count={len(result)}")
-                return result
-        except Exception as exc:
-            log(f"get_translation_history_error: {exc}")
-            return [{"error": str(exc)}]
-
-    @mcp.tool()
     async def get_feedback_corrections(
         language_code: Optional[str] = None,
         limit: int = 10,
@@ -362,34 +338,3 @@ def register(mcp, log) -> None:
             log(f"get_feedback_corrections_error: {exc}")
             return [{"error": str(exc)}]
 
-    @mcp.tool()
-    async def rollback_translation(
-        translation_id: int,
-        version_id: int,
-        performed_by: str = "system_user",
-    ) -> dict:
-        """Rollback a translation to a specific version.
-        
-        Args:
-            translation_id: ID of the translation to rollback
-            version_id: ID of the version to rollback to
-            performed_by: User who performed the rollback (defaults to "system_user")
-            
-        Returns the updated translation dict.
-        On error returns an error dict.
-        """
-        log(f"mcp.rollback_translation called translation_id={translation_id} version_id={version_id}")
-
-        from db.session import get_session
-        from services.translation_service import rollback_translation
-
-        try:
-            async for session in get_session():
-                result = await rollback_translation(session, translation_id, version_id, performed_by)
-                if not result:
-                    return {"error": "Translation or version not found"}
-                log(f"rollback_translation completed translation_id={translation_id} version_id={version_id}")
-                return result
-        except Exception as exc:
-            log(f"rollback_translation_error: {exc}")
-            return {"error": str(exc)}

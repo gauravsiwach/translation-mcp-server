@@ -107,16 +107,6 @@ class TranslationRejectRequest(BaseModel):
     performed_by: str = Field(..., min_length=1)
 
 
-class TranslationHistoryResponse(BaseModel):
-    id: int
-    translation_id: int
-    label: Optional[str] = None
-    translation: Optional[str] = None
-    type: Optional[str] = None
-    status: Optional[str] = None
-    changed_by: Optional[str] = None
-    change_reason: Optional[str] = None
-    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -40,9 +40,7 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 > 5. **Update translation** — modify existing translation by ID
 > 6. **Approve translation** — approve a translation by ID or bulk approve by label
 > 7. **Reject translation** — reject a translation and optionally create feedback correction
-> 8. **View version history** — see all versions of a translation
-> 9. **Rollback translation** — revert a translation to a previous version
-> 10. **View feedback corrections** — see recent feedback corrections for AI improvement
+> 8. **View feedback corrections** — see recent feedback corrections for AI improvement
 >
 > What would you like to do?"
 
@@ -56,9 +54,7 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 > 6. **Download translations** — export all translations as CSV or JSON
 > 7. **Approve translation** — approve a translation by ID or bulk approve by label
 > 8. **Reject translation** — reject a translation and optionally create feedback correction
-> 9. **View version history** — see all versions of a translation
-> 10. **Rollback translation** — revert a translation to a previous version
-> 11. **View feedback corrections** — see recent feedback corrections for AI improvement
+> 9. **View feedback corrections** — see recent feedback corrections for AI improvement
 >
 > What would you like to do?"
 
@@ -664,35 +660,6 @@ Example call:
 }
 ```
 
-### get_translation_history
-**When:** user wants to see version history for a translation
-**Required:** `translation_id`
-**Returns:** Array of version history dicts
-
-Example call:
-```json
-{
-  "translation_id": 1
-}
-```
-
-Example response:
-```json
-[
-  {
-    "id": 1,
-    "translation_id": 1,
-    "label": "basket.total",
-    "translation": "Total",
-    "type": "ui",
-    "status": "APPROVED",
-    "changed_by": "user123",
-    "change_reason": "Status changed to APPROVED",
-    "created_at": "2026-05-21T12:00:00"
-  }
-]
-```
-
 ### get_feedback_corrections
 **When:** user wants to see recent feedback corrections for AI improvement
 **Optional:** `language_code`, `limit` (default: 10)
@@ -723,20 +690,6 @@ Example response:
 ]
 ```
 
-### rollback_translation
-**When:** user wants to revert a translation to a previous version
-**Required:** `translation_id`, `version_id`, `performed_by`
-**Returns:** The updated translation dict
-
-Example call:
-```json
-{
-  "translation_id": 1,
-  "version_id": 1,
-  "performed_by": "user123"
-}
-```
-
 ---
 
 ## Strict operating rules
@@ -745,7 +698,7 @@ Example call:
 2. **Never call without confirmation** — Always show plan first and wait for approval
 3. **Ask, don't assume** — If missing info, ask for it one question at a time
 4. **Only these MCP tools exist:**
-   - **Common:** `list_languages`, `get_translations`, `update_translation`, `approve_translation`, `reject_translation`, `get_translation_history`, `get_feedback_corrections`, `rollback_translation`
+   - **Common:** `list_languages`, `get_translations`, `update_translation`, `approve_translation`, `reject_translation`, `get_feedback_corrections`
    - **API mode only:** `ai_translate`, `get_batch_status`
    - **Tool mode only:** `create_translation`
 5. **Mode-specific tools:**

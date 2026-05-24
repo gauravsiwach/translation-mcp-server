@@ -42,16 +42,6 @@ class TestMCPTools:
         assert result is not None
         assert result["status"] == "REJECTED"
 
-    async def test_get_translation_history_service_function(self, mock_db_session, mock_version_history):
-        """Test get_translation_history service function (called by MCP tool)."""
-        from services.translation_service import get_translation_history
-
-        mock_db_session.execute.return_value.scalars.return_value.all.return_value = [mock_version_history]
-
-        result = await get_translation_history(mock_db_session, 1)
-
-        assert isinstance(result, list)
-
     async def test_get_feedback_corrections_service_function(self, mock_db_session, mock_feedback_correction):
         """Test get_feedback_corrections service function (called by MCP tool)."""
         from services.feedback_service import get_feedback_corrections
@@ -61,15 +51,4 @@ class TestMCPTools:
         result = await get_feedback_corrections(mock_db_session)
 
         assert isinstance(result, list)
-
-    async def test_rollback_translation_service_function(self, mock_db_session, mock_version_history):
-        """Test rollback_translation service function (called by MCP tool)."""
-        from services.translation_service import rollback_translation
-
-        mock_db_session.execute.return_value.scalar_one_or_none.return_value = mock_version_history
-        mock_db_session.execute.return_value.return_value = None
-
-        result = await rollback_translation(mock_db_session, 1, 1, "system_user")
-
-        assert result is not None
 

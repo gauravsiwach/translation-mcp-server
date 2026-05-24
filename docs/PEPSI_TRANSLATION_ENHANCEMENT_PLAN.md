@@ -71,7 +71,7 @@ This plan outlines the database schema changes to add versioning, status workflo
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
-| id | BIGINT | PRIMARY KEY, SEQUENCE | (existing, added sequence) |
+| id | BIGINT | PRIMARY KEY | (existing) |
 | label | TEXT | NOT NULL | (existing) |
 | language_code | VARCHAR(10) | NOT NULL, FK → pepsi_languages.language_code | (existing) |
 | translation | TEXT | NOT NULL | (existing) |
@@ -839,3 +839,43 @@ None (all changes in existing files)
 - Existing endpoints continue to work without new fields
 - Status defaults to PENDING_REVIEW if not provided
 - New endpoints don't affect existing functionality
+
+---
+
+## Version Feature Rollback (Update)
+
+**Status:** REMOVED - Versioning not required for simple translations
+
+**Reasoning:**
+- Simple translation system does not need version history
+- Rollback capability adds complexity without business value
+- Status workflow and feedback correction provide sufficient change tracking
+
+**What Was Removed:**
+- PepsiTranslationVersion table and model
+- version column from PepsiTranslation table
+- create_version_history() function and all calls
+- get_translation_history() function
+- rollback_translation() function
+- GET /translations/{id}/history API endpoint
+- POST /translations/{id}/rollback/{version_id} API endpoint
+- TranslationHistoryResponse schema
+- get_translation_history MCP tool
+- rollback_translation MCP tool
+- tests/test_version_history.py
+- tests/test_rollback.py
+- Related test methods in test_rest_api.py
+
+**What Was Kept:**
+- Status workflow (PENDING_REVIEW, APPROVED, REJECTED)
+- Feedback correction feature
+- Figma integration columns
+- All other existing functionality
+
+**PK/Sequence Clarification:**
+- The enhancement plan mentioned adding a SEQUENCE to pepsi_translations.id (line 74)
+- However, the actual implementation did not include this sequence
+- The SQLAlchemy model only uses: `id = Column(BigInteger, primary_key=True)`
+- The alembic migrations only add sequences to pepsi_translation_versions and pepsi_feedback_corrections
+- No sequence was added to pepsi_translations.id in the actual code
+- Therefore, no PK/sequence changes need to be removed from the codebase

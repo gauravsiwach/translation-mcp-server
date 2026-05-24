@@ -144,18 +144,6 @@ class TestRestAPI:
                 )
                 assert response.status_code in [200, 404]
 
-    def test_get_translations_id_history(self, mock_db_session):
-        """Test GET /translations/{id}/history."""
-        from main import app
-
-        async def _mock_get_session():
-            yield mock_db_session
-
-        with patch("api.translations.get_session", _mock_get_session):
-            with TestClient(app) as client:
-                response = client.get("/api/v1/translations/1/history")
-                assert response.status_code in [200, 404]
-
     def test_get_feedback_corrections(self, mock_db_session):
         """Test GET /feedback-corrections."""
         from main import app
@@ -167,38 +155,6 @@ class TestRestAPI:
             with TestClient(app) as client:
                 response = client.get("/api/v1/feedback-corrections")
                 assert response.status_code == 200
-
-    def test_post_translations_id_rollback_version_id(self, mock_db_session):
-        """Test POST /translations/{id}/rollback/{version_id}."""
-        from main import app
-
-        mock_row = MagicMock()
-        mock_row.id = 1
-        mock_row.label = "basket.total"
-        mock_row.language_code = "en"
-        mock_row.translation = "Total"
-        mock_row.type = "ui"
-        mock_row.status = "PENDING_REVIEW"
-        mock_row.figma_node_id = None
-        mock_row.figma_file_key = None
-        mock_row.figma_screenshot_url = None
-        mock_row.created_by = "system_user"
-        mock_row.updated_by = "system_user"
-        mock_row.created_datetime = None
-        mock_row.updated_datetime = None
-        mock_row.version = 1
-        mock_db_session.execute.return_value.scalar_one_or_none.return_value = mock_row
-
-        async def _mock_get_session():
-            yield mock_db_session
-
-        with patch("api.translations.get_session", _mock_get_session):
-            with TestClient(app) as client:
-                response = client.post(
-                    "/api/v1/translations/1/rollback/1",
-                    json={"performed_by": "system_user"}
-                )
-                assert response.status_code in [200, 404]
 
     def test_get_translations_with_status_filter(self, mock_db_session):
         """Test GET /translations with status filter."""

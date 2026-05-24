@@ -16,7 +16,6 @@ from api.schemas.translations import (
     FileUploadResponse,
     TranslationApproveRequest,
     TranslationRejectRequest,
-    TranslationHistoryResponse,
     FeedbackCorrectionResponse,
 )
 from db.session import get_session
@@ -30,9 +29,6 @@ from services.translation_service import (
     ai_translate,
     get_batch_status,
     approve_translation,
-    create_version_history,
-    get_translation_history,
-    rollback_translation,
 )
 from services.feedback_service import (
     reject_translation,
@@ -383,38 +379,6 @@ async def reject_translation_endpoint(translation_id: int, request: TranslationR
         raise
     except Exception as exc:
         logger.exception("reject_translation.failed", exc=str(exc))
-        raise HTTPException(status_code=500, detail="internal server error")
-
-
-@router.get("/translations/{translation_id}/history", response_model=List[TranslationHistoryResponse])
-async def get_translation_history_endpoint(translation_id: int):
-    """Get version history for a translation."""
-    logger.info("get_translation_history.called", translation_id=translation_id)
-    try:
-        async for session in get_session():
-            result = await get_translation_history(session, translation_id)
-            logger.info("get_translation_history.completed", translation_id=translation_id, count=len(result))
-            return result
-    except Exception as exc:
-        logger.exception("get_translation_history.failed", exc=str(exc))
-        raise HTTPException(status_code=500, detail="internal server error")
-
-
-@router.post("/translations/{translation_id}/rollback/{version_id}", response_model=TranslationResponse)
-async def rollback_translation_endpoint(translation_id: int, version_id: int, performed_by: str = Body(..., embed=True)):
-    """Rollback a translation to a specific version."""
-    logger.info("rollback_translation.called", translation_id=translation_id, version_id=version_id, performed_by=performed_by)
-    try:
-        async for session in get_session():
-            result = await rollback_translation(session, translation_id, version_id, performed_by)
-            if not result:
-                raise HTTPException(status_code=404, detail="Translation or version not found")
-            logger.info("rollback_translation.completed", translation_id=translation_id, version_id=version_id)
-            return result
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("rollback_translation.failed", exc=str(exc))
         raise HTTPException(status_code=500, detail="internal server error")
 
 

@@ -69,22 +69,6 @@ def mock_translation():
 
 
 @pytest.fixture
-def mock_version_history():
-    """Mock PepsiTranslationVersion instance."""
-    version = MagicMock()
-    version.id = 1
-    version.translation_id = 1
-    version.label = "basket.total"
-    version.translation = "Total"
-    version.type = "ui"
-    version.status = "APPROVED"
-    version.changed_by = "system_user"
-    version.change_reason = "Status changed to APPROVED"
-    version.created_at = datetime.now()
-    return version
-
-
-@pytest.fixture
 def mock_feedback_correction():
     """Mock PepsiFeedbackCorrection instance."""
     correction = MagicMock()

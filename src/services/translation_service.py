@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any, Union
 from sqlalchemy import select
 import uuid
 
-from db.models import PepsiLanguage, PepsiTranslation, PepsiTranslationVersion, PepsiFeedbackCorrection
+from db.models import PepsiLanguage, PepsiTranslation, PepsiFeedbackCorrection
 from utils.logger import get_logger
 from config import settings
 from services import feedback_service
@@ -131,10 +131,6 @@ async def create_translation(
         await session.flush()
         await session.commit()
         
-        # Create version history for new translation
-        actual_created_by = created_by or "system"
-        await create_version_history(session, row.id, actual_created_by, "Initial version")
-        
         logger.info("create_translation", id=row.id, label=label, language_code=language_code)
         return {
             "id": row.id,
@@ -209,10 +205,6 @@ async def create_translation(
                 session.add(row)
                 await session.flush()
                 created_count += 1
-                
-                # Create version history for new translation
-                actual_created_by = created_by or "system"
-                await create_version_history(session, row.id, actual_created_by, "Initial version")
                 
                 results.append({
                     "id": row.id,
@@ -292,12 +284,6 @@ async def update_translation(
         content_changes.append("type")
     if status is not None and status != row.status:
         content_changes.append("status")
-
-    # Create version history before update if there are content changes
-    if content_changes:
-        actual_updated_by = updated_by or "system"
-        change_reason = f"{', '.join(c.capitalize() for c in content_changes)} updated"
-        await create_version_history(session, row.id, actual_updated_by, change_reason)
 
     # Build update statement to avoid async session issues with object modification
     from sqlalchemy import update
@@ -700,9 +686,6 @@ async def approve_translation(
     if not row:
         return None
     
-    # Create version history before approving
-    await create_version_history(session, translation_id, performed_by, "Status changed to APPROVED")
-    
     update_stmt = update(PepsiTranslation).where(PepsiTranslation.id == translation_id).values(
         status="APPROVED",
         updated_by=performed_by
@@ -729,144 +712,6 @@ async def approve_translation(
     }
 
 
-async def create_version_history(
-    session,
-    translation_id: int,
-    changed_by: str,
-    change_reason: Optional[str] = None,
-) -> None:
-    """Manually create a version history entry for a translation.
-    
-    Args:
-        translation_id: ID of the translation to snapshot
-        changed_by: User who made the change
-        change_reason: Optional reason for the change (auto-generated if not provided)
-    """
-    stmt = select(PepsiTranslation).where(PepsiTranslation.id == translation_id)
-    row = (await session.execute(stmt)).scalar_one_or_none()
-    if not row:
-        raise ValueError(f"Translation not found: id={translation_id}")
-    
-    version = PepsiTranslationVersion(
-        translation_id=translation_id,
-        label=row.label,
-        translation=row.translation,
-        type=row.type,
-        status=row.status,
-        changed_by=changed_by,
-        change_reason=change_reason,
-    )
-    session.add(version)
-    await session.flush()
-    
-    # Update main table's version column to point to this version
-    row.version = version.id
-    session.add(row)
-    
-    await session.commit()
-    
-    logger.info("create_version_history", translation_id=translation_id, changed_by=changed_by, change_reason=change_reason)
-
-
-async def get_translation_history(
-    session,
-    translation_id: int,
-) -> List[Dict[str, Any]]:
-    """Get version history for a translation.
-    
-    Args:
-        translation_id: ID of the translation
-        
-    Returns:
-        List of historical versions ordered by created_at DESC
-    """
-    stmt = select(PepsiTranslationVersion).where(
-        PepsiTranslationVersion.translation_id == translation_id
-    ).order_by(PepsiTranslationVersion.created_at.desc())
-    
-    res = await session.execute(stmt)
-    rows = res.scalars().all()
-    
-    return [
-        {
-            "id": r.id,
-            "translation_id": r.translation_id,
-            "label": r.label,
-            "translation": r.translation,
-            "type": r.type,
-            "status": r.status,
-            "changed_by": r.changed_by,
-            "change_reason": r.change_reason,
-            "created_at": r.created_at,
-        }
-        for r in rows
-    ]
-
-
-async def rollback_translation(
-    session,
-    translation_id: int,
-    version_id: int,
-    performed_by: str,
-) -> Optional[Dict[str, Any]]:
-    """Rollback a translation to a specific version.
-    
-    Args:
-        translation_id: ID of the translation to rollback
-        version_id: ID of the version to rollback to
-        performed_by: User who performed the rollback
-        
-    Returns:
-        Updated translation dict or None if not found
-    """
-    from sqlalchemy import update
-    
-    # Get the version to rollback to
-    stmt = select(PepsiTranslationVersion).where(
-        PepsiTranslationVersion.id == version_id,
-        PepsiTranslationVersion.translation_id == translation_id
-    )
-    version_row = (await session.execute(stmt)).scalar_one_or_none()
-    if not version_row:
-        return None
-    
-    # Get current translation
-    stmt = select(PepsiTranslation).where(PepsiTranslation.id == translation_id)
-    row = (await session.execute(stmt)).scalar_one_or_none()
-    if not row:
-        return None
-    
-    # Create version history before rollback
-    await create_version_history(session, translation_id, performed_by, f"Rolled back to version {version_id}")
-    
-    # Update main table with version data
-    update_stmt = update(PepsiTranslation).where(PepsiTranslation.id == translation_id).values(
-        translation=version_row.translation,
-        type=version_row.type,
-        status=version_row.status,
-        updated_by=performed_by,
-        version=version_id,
-    )
-    await session.execute(update_stmt)
-    await session.commit()
-    await session.refresh(row)
-    
-    logger.info("rollback_translation", translation_id=translation_id, version_id=version_id, performed_by=performed_by)
-    return {
-        "id": row.id,
-        "label": row.label,
-        "language_code": row.language_code,
-        "translation": row.translation,
-        "type": row.type,
-        "status": row.status,
-        "figma_node_id": row.figma_node_id,
-        "figma_file_key": row.figma_file_key,
-        "figma_screenshot_url": row.figma_screenshot_url,
-        "created_by": row.created_by,
-        "updated_by": row.updated_by,
-        "created_datetime": row.created_datetime,
-        "updated_datetime": row.updated_datetime,
-    }
 
 
 

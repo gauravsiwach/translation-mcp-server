@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any
 from sqlalchemy import select, update
 
-from db.models import PepsiFeedbackCorrection, PepsiTranslation, PepsiTranslationVersion
+from db.models import PepsiFeedbackCorrection, PepsiTranslation
 from utils.logger import get_logger
 
 logger = get_logger("feedback_service")
@@ -105,8 +105,6 @@ async def reject_translation(
     Returns:
         Updated translation dict or None if not found
     """
-    from services.translation_service import create_version_history
-    
     stmt = select(PepsiTranslation).where(PepsiTranslation.id == translation_id)
     row = (await session.execute(stmt)).scalar_one_or_none()
     if not row:
@@ -114,10 +112,6 @@ async def reject_translation(
     
     # Store original value before potential update
     ai_original_value = row.translation
-    
-    # Create version history before rejecting
-    change_reason = "Rejected with correction" if corrected_value else "Status changed to REJECTED"
-    await create_version_history(session, translation_id, performed_by, change_reason)
     
     # Update translation status
     update_values = {"status": "REJECTED", "updated_by": performed_by}

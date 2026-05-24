@@ -24,29 +24,13 @@ class PepsiTranslation(Base):
     created_datetime = Column(DateTime(timezone=True), server_default=func.now())
     updated_datetime = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
-    # New columns for versioning, status, Figma integration, and audit tracking
+    # New columns for status workflow, Figma integration, and audit tracking
     status = Column(String(32), default='PENDING_REVIEW')
     figma_node_id = Column(String(128), nullable=True)
     figma_file_key = Column(String(255), nullable=True)
     figma_screenshot_url = Column(Text, nullable=True)
     created_by = Column(String(128), nullable=True)
     updated_by = Column(String(128), nullable=True)
-    version = Column(BigInteger, ForeignKey("customer_uat_ind.pepsi_translation_versions.id"), nullable=True)
-
-
-class PepsiTranslationVersion(Base):
-    __tablename__ = "pepsi_translation_versions"
-    __table_args__ = {"schema": "customer_uat_ind", "extend_existing": True}
-    
-    id = Column(BigInteger, primary_key=True)
-    translation_id = Column(BigInteger, ForeignKey("customer_uat_ind.pepsi_translations.id"), nullable=False)
-    label = Column(Text, nullable=True)
-    translation = Column(Text, nullable=True)
-    type = Column(String(255), nullable=True)
-    status = Column(String(32), nullable=True)
-    changed_by = Column(String(128), nullable=True)
-    change_reason = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class PepsiFeedbackCorrection(Base):
