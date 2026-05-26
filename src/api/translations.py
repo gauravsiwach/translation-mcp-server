@@ -27,6 +27,7 @@ from services.translation_service import (
     run_bulk_ai_generation,
     get_batch_status,
 )
+from services.figma_service import find_node_by_text
 from utils.logger import get_logger
 
 router = APIRouter()
@@ -169,3 +170,17 @@ async def post_translation_reject(translation_id: int, payload: RejectTranslatio
     except Exception as exc:
         logger.exception("post_translation_reject.failed", translation_id=translation_id, exc=str(exc))
         raise HTTPException(status_code=500, detail="internal server error")
+
+
+# DEBUG ENDPOINT - Remove after testing
+@router.get("/debug/find-node-by-text", status_code=200)
+async def debug_find_node_by_text(screen_id: str, default_text: str):
+    """DEBUG: Test find_node_by_text method. Remove after testing."""
+    logger.info("debug_find_node_by_text.called", screen_id=screen_id, default_text=default_text)
+    try:
+        result = await find_node_by_text(screen_id, default_text)
+        logger.info("debug_find_node_by_text.completed", result=result)
+        return result
+    except Exception as exc:
+        logger.exception("debug_find_node_by_text.failed", exc=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))

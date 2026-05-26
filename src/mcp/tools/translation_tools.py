@@ -413,3 +413,23 @@ def register(mcp, log) -> None:
             log(f"get_figma_screenshot_url error: {exc}")
             return {"error": str(exc)}
 
+    @mcp.tool()
+    async def find_figma_node_by_text(screen_id: str, default_text: str) -> dict:
+        """Find Figma node by text content (case-insensitive).
+
+        Searches all nodes in the screen for text matching default_text.
+        Returns matching node_id or None.
+        Returns: {"figma_file_key": "...", "figma_node_id": "..." or None}
+        """
+        log(f"mcp.find_figma_node_by_text called screen_id={screen_id} default_text={default_text}")
+        from src.services.figma_service import find_node_by_text
+        try:
+            result = await find_node_by_text(screen_id, default_text)
+            log(f"find_figma_node_by_text completed screen_id={screen_id} matched={result.get('figma_node_id') is not None}")
+            return result
+        except Exception as exc:
+            log(f"find_figma_node_by_text error: {exc}")
+            import traceback
+            log(f"find_figma_node_by_text traceback: {traceback.format_exc()}")
+            return {"error": str(exc)}
+

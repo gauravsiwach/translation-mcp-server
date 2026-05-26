@@ -202,43 +202,49 @@ Expected tool response:
 }
 ```
 
-### Step B — Figma node selection
+### Step B — Figma node selection (Smart Matching)
 
 Run this BEFORE showing translations to the user.
-**Do NOT call any Figma MCP tool here.** All data comes from `get_figma_screen_config` called in Step A.
 
 **Case A — User already provided `figma_node_id` explicitly:**
 Skip. Store `{figma_file_key, figma_node_id}`. Go to Step C.
 
-**Case B — Screen config available from Step A:**
-```
-2. Build a Figma URL for EACH configured node and show the page name for context:
-   https://www.figma.com/design/{figma_file_key}?node-id={node_id}
+**Case B — Screen config available from Step A (Smart Text Matching):**
+1. Call `find_figma_node_by_text(screen_id, default_text)` silently (in background)
+2. **If match found:**
+   a. Call `get_figma_screenshot_url(figma_file_key, figma_node_id)` to get screenshot
+   b. Show Figma preview to user with the actual image:
+      > "I found a matching Figma node for `{default_text}`:
+      > 
+      > ![Figma Screenshot]({figma_screenshot_url})
+      > 
+      > - **Node ID:** {figma_node_id}
+      >
+      > Is this the correct Figma frame? (yes/no)"
+   
+   c. WAIT for confirmation:
+      - **yes** → store `{figma_file_key, figma_node_id, figma_screenshot_url}` → go to Step C
+      - **no** → ask: "Please paste the correct Figma node link or node ID, or type 'skip':"
+        - If link/ID → extract node-id → call `get_figma_screenshot_url` → show preview → confirm again
+        - If 'skip' → store figma = null
 
-3. Show the list to the user:
-   "Here are the Figma sections configured for the `{screen_id}` screen (Figma page: **{figma_page_name}**).
-    Which one contains `{default_text}`?
-
-    1. https://www.figma.com/design/{file_key}?node-id=35773:267354
-    2. https://www.figma.com/design/{file_key}?node-id=35773:267356
-    3. https://www.figma.com/design/{file_key}?node-id=35505:113695
-    4. None of these (I'll provide a different node link)
-    5. Skip Figma linking for this key"
-
-   WAIT for user response:
-     1/2/3       → store corresponding {figma_file_key, figma_node_id} for Step D
-     4           → ask: "Paste the Figma node link or node ID:" → extract node-id from URL → store it
-     5 / skip    → store figma = null for this key
-```
+3. **If no match** → ask user:
+   > "No matching Figma node found for '{default_text}' on screen '{screen_id}'.
+   >
+   > Would you like to:
+   > 1. Paste a Figma node link manually
+   > 2. Skip Figma linking for this key"
+   
+   WAIT for response:
+   - 1 → ask: "Paste the Figma node link or node ID:" → extract node-id from URL → call `get_figma_screenshot_url` → show image with `![Figma Screenshot]({figma_screenshot_url})` → ask "Is this correct? (yes/no)" → WAIT for confirmation
+   - 2 → store figma = null for this key
 
 **Case C — No screen config found:**
-```
 Ask once: "No Figma config found for screen `{screen_id}`.
            You can:
            1. Paste a Figma node link directly
            2. Skip Figma linking for this key"
-WAIT → 1 → extract node-id from URL → store it / 2 → figma = null
-```
+WAIT → 1 → extract node-id from URL → call `get_figma_screenshot_url` → show image with `![Figma Screenshot]({figma_screenshot_url})` → confirm / 2 → figma = null
 
 ### Step C — Translation review
 

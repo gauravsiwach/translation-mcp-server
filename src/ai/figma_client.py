@@ -6,7 +6,7 @@ Figma Images API.
 
 POC: Keep implementation minimal and robust with clear error handling.
 """
-from typing import List, Dict
+from typing import List, Dict, Any
 import httpx
 from urllib.parse import quote
 
@@ -41,7 +41,7 @@ async def fetch_image_urls(file_key: str, node_ids: List[str], *, format: str = 
     # Do not URL-encode the node ids string — Figma expects colons unencoded (e.g. 35773:267354)
     url = f"https://api.figma.com/v1/images/{quote(file_key)}?ids={ids_param}&format={quote(format)}"
     
-    logger.debug("figma_request.url", url=url)
+    logger.info("figma_request.url", url=url)
 
     headers = {
         "X-Figma-Token": token,
@@ -79,3 +79,73 @@ async def fetch_image_urls(file_key: str, node_ids: List[str], *, format: str = 
 
     logger.info("figma_request.success", file_key=file_key, images_fetched=len(result), total_requested=len(node_ids))
     return result
+
+
+async def fetch_file_document(file_key: str, node_ids: List[str] = None) -> Dict[str, Any]:
+    """Fetch Figma file document structure.
+
+    If node_ids is provided, fetches only those specific nodes to avoid
+    request too large errors. Otherwise fetches the entire file.
+
+    Returns the document node which contains the tree structure
+    including all pages, frames, groups, and text nodes.
+
+    Raises `RuntimeError` on HTTP or auth errors.
+    """
+    logger.info("figma_file_document.start", file_key=file_key, node_ids_count=len(node_ids) if node_ids else 0)
+    
+    if not file_key:
+        logger.warning("figma_file_document.invalid_params", file_key=file_key)
+        return {}
+
+    token = settings.FIGMA_ACCESS_TOKEN
+    if not token:
+        logger.error("figma_file_document.missing_token")
+        raise RuntimeError("FIGMA_ACCESS_TOKEN is not configured in settings")
+
+    headers = {
+        "X-Figma-Token": token,
+        "Accept": "application/json",
+    }
+
+    # Increase timeout for large file documents (can be 30-60 seconds)
+    timeout = httpx.Timeout(600.0)
+    
+    try:
+        # Build URL with node_ids filter if provided to avoid request too large error
+        if node_ids:
+            ids_param = ",".join(node_ids)
+            url = f"https://api.figma.com/v1/files/{quote(file_key)}?ids={quote(ids_param)}"
+        else:
+            url = f"https://api.figma.com/v1/files/{quote(file_key)}"
+        
+        logger.info("figma_file_document.fetching", url=url, timeout_seconds=timeout)
+        logger.info("figma_file_document.request_headers", headers_keys=list(headers.keys()), token_present=bool(headers.get("X-Figma-Token")))
+        
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url, headers=headers)
+            logger.info("figma_file_document.response_received", status_code=resp.status_code, response_length=len(resp.text))
+            
+            if resp.status_code == 401:
+                logger.error("figma_file_document.unauthorized", status_code=resp.status_code, response_text=resp.text)
+                raise RuntimeError("Figma API unauthorized (check FIGMA_ACCESS_TOKEN)")
+            
+            if resp.status_code >= 400:
+                logger.error("figma_file_document.api_error", status_code=resp.status_code, response_text=resp.text)
+                raise RuntimeError(f"Figma Files API returned {resp.status_code}: {resp.text}")
+            
+            payload = resp.json()
+            logger.info("figma_file_document.payload_keys", payload_keys=list(payload.keys()))
+            
+            # Extract the document node
+            document = payload.get("document")
+            if not document:
+                logger.warning("figma_file_document.no_document", payload_keys=list(payload.keys()))
+                return {}
+            
+            logger.info("figma_file_document.success", file_key=file_key, document_type=document.get("type"), document_name=document.get("name"))
+            return document
+            
+    except Exception as exc:
+        logger.error("figma_file_document.error", file_key=file_key, error=str(exc), exc_info=True)
+        raise

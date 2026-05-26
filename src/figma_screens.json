@@ -1,11 +1,11 @@
 {"home": {
     "figma_file_key": "Fr5237RlW3syTjaBAB1kMN",
     "figma_page_name": "Home Screen",
-    "nodes": ["35773:267354","35773:267356","35505:113695"]
+    "nodes": ["35773:267354"]
   },
   "basket": {
     "figma_file_key": "Fr5237RlW3syTjaBAB1kMN",
     "figma_page_name": "Product Catalog",
-    "nodes": ["31157:391595","16597:291324","18747:109494"]
+    "nodes": ["31157:391595","16597:291324","18747:109494","35773:267356","35505:113695"]
   }  
 }

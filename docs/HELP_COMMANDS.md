@@ -37,8 +37,12 @@ alembic upgrade head
 > Ensure `DB_URL` is set in `.env`.
 
 ```bash
+# Activate venv and set PYTHONPATH
+source .venv/bin/activate
+source src/activate.sh
+
 # Start the API server (hot-reload enabled)
-uvicorn main:app --app-dir src --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
 # Alternative: start app + DB together via Docker
 docker-compose up --build
