@@ -1,8 +1,11 @@
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, HTTPException, status, Body, UploadFile, File, Form, Query
+from fastapi import APIRouter, HTTPException, status, Body, UploadFile, File, Form, Query, Depends
 from sqlalchemy import select
 from config import settings
+
+from auth.dependencies import CurrentUser, require_permission
+from auth.permissions import Permission
 
 from api.schemas.translations import (
     LanguageResponse,
@@ -136,8 +139,11 @@ async def get_translation_by_id(translation_id: int):
 
 
 @router.post("/translations", status_code=status.HTTP_200_OK)
-async def post_translation(payload: TranslationCreateBulkRequest):
-    """Create or upsert translations (accepts array with 1 or more items)."""
+async def post_translation(
+    payload: TranslationCreateBulkRequest,
+    user: CurrentUser = Depends(require_permission(Permission.CREATE_TRANSLATION)),
+):
+    """Create or upsert translations (accepts array with 1 or more items). Requires SuperAdmin."""
     translations_dict = [t.model_dump() for t in payload.translations]
     logger.info("post_translation.called", count=len(payload.translations))
     try:
@@ -158,7 +164,8 @@ async def put_translation(
     translation_id: Optional[int] = None,
     label: Optional[str] = None,
     language_code: Optional[str] = None,
-    payload: TranslationUpdateRequest = Body(...)
+    payload: TranslationUpdateRequest = Body(...),
+    user: CurrentUser = Depends(require_permission(Permission.UPDATE_TRANSLATION)),
 ):
     """Update translation text and/or type by ID OR by label+language_code.
 
@@ -194,8 +201,11 @@ async def put_translation(
 
 
 @router.post("/translations/ai-translate", status_code=status.HTTP_200_OK)
-async def post_ai_translate(payload: AITranslateBulkRequest):
-    """AI generate + upsert translations (accepts array with 1 or more items)."""
+async def post_ai_translate(
+    payload: AITranslateBulkRequest,
+    user: CurrentUser = Depends(require_permission(Permission.AI_TRANSLATE)),
+):
+    """AI generate + upsert translations (accepts array with 1 or more items). Requires SuperAdmin."""
     translations_dict = [t.model_dump() for t in payload.translations]
     logger.info("post_ai_translate.called", count=len(payload.translations))
     try:
@@ -318,7 +328,11 @@ async def upload_translation_file(
 # New endpoints for status workflow and feedback correction
 
 @router.post("/translations/{translation_id}/approve", response_model=TranslationResponse)
-async def approve_translation_endpoint(translation_id: int, request: TranslationApproveRequest):
+async def approve_translation_endpoint(
+    translation_id: int,
+    request: TranslationApproveRequest,
+    user: CurrentUser = Depends(require_permission(Permission.APPROVE_TRANSLATION)),
+):
     """Approve a translation by setting status to APPROVED.
     
     If request.label is provided, translation_id is ignored and all translations
@@ -359,7 +373,11 @@ async def approve_translation_endpoint(translation_id: int, request: Translation
 
 
 @router.post("/translations/{translation_id}/reject", response_model=TranslationResponse)
-async def reject_translation_endpoint(translation_id: int, request: TranslationRejectRequest):
+async def reject_translation_endpoint(
+    translation_id: int,
+    request: TranslationRejectRequest,
+    user: CurrentUser = Depends(require_permission(Permission.REJECT_TRANSLATION)),
+):
     """Reject a translation and optionally create a feedback correction record."""
     logger.info("reject_translation.called", translation_id=translation_id, performed_by=request.performed_by)
     try:

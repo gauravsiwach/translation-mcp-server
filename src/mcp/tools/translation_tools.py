@@ -10,8 +10,12 @@ from typing import List, Optional, Union
 def register(mcp, log) -> None:
     """Register translation-related MCP tools on the given `mcp` instance."""
 
+    from auth.require import require
+    from auth.permissions import Permission
+
     @mcp.tool()
-    async def list_languages() -> List[dict]:
+    @require(Permission.LIST_LANGUAGES)
+    async def list_languages(user_role: str = "Viewer") -> List[dict]:
         """Return all rows from pepsi_languages.
 
         Returns a list of dicts with language_code, language, created_datetime, updated_datetime.
@@ -31,10 +35,12 @@ def register(mcp, log) -> None:
             return [{"error": str(exc)}]
 
     @mcp.tool()
+    @require(Permission.LIST_TRANSLATIONS)
     async def get_translations(
         language_code: Optional[str] = None,
         type: Optional[str] = None,
         label: Optional[str] = None,
+        user_role: str = "Viewer",
     ) -> List[dict]:
         """Filter translations by label / language_code / type.
 
@@ -55,7 +61,8 @@ def register(mcp, log) -> None:
             return [{"error": str(exc)}]
 
     @mcp.tool()
-    async def create_translation(translations: List[dict]) -> dict:
+    @require(Permission.CREATE_TRANSLATION)
+    async def create_translation(translations: List[dict], user_role: str = "Viewer") -> dict:
         """Bulk upsert translations into pepsi_translations.
 
         Args:
@@ -78,12 +85,14 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.UPDATE_TRANSLATION)
     async def update_translation(
         translation_id: Optional[int] = None,
         label: Optional[str] = None,
         language_code: Optional[str] = None,
         translation: Optional[str] = None,
         type: Optional[str] = None,
+        user_role: str = "Viewer",
     ) -> dict:
         """Update translation text / type by id OR by label+language_code.
 
@@ -120,7 +129,8 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
-    async def ai_translate(translations: List[dict]) -> dict:
+    @require(Permission.AI_TRANSLATE)
+    async def ai_translate(translations: List[dict], user_role: str = "Viewer") -> dict:
         """Bulk AI translate labels across target language codes.
 
         Args:
@@ -145,7 +155,8 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
-    async def get_batch_status(batch_id: str) -> dict:
+    @require(Permission.GET_BATCH_STATUS)
+    async def get_batch_status(batch_id: str, user_role: str = "Viewer") -> dict:
         """Get status of an async AI translation batch.
 
         Args:
@@ -168,7 +179,8 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
-    async def download_translations(format: str = "csv") -> dict:
+    @require(Permission.LIST_TRANSLATIONS)
+    async def download_translations(format: str = "csv", user_role: str = "Viewer") -> dict:
         """Download all translations from database as CSV or JSON.
 
         Args:
@@ -217,10 +229,12 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.APPROVE_TRANSLATION)
     async def approve_translation(
         translation_id: int,
         performed_by: str = "system_user",
         label: Optional[str] = None,
+        user_role: str = "Viewer",
     ) -> dict:
         """Approve a translation by setting status to APPROVED.
         
@@ -271,11 +285,13 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.REJECT_TRANSLATION)
     async def reject_translation(
         translation_id: int,
         performed_by: str = "system_user",
         corrected_value: Optional[str] = None,
         correction_reason: Optional[str] = None,
+        user_role: str = "Viewer",
     ) -> dict:
         """Reject a translation and optionally create a feedback correction record.
         
@@ -311,9 +327,11 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.LIST_TRANSLATIONS)
     async def get_feedback_corrections(
         language_code: Optional[str] = None,
         limit: int = 10,
+        user_role: str = "Viewer",
     ) -> List[dict]:
         """Get recent feedback corrections for AI improvement.
         

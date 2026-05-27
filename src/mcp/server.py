@@ -79,10 +79,20 @@ except Exception as exc:  # pragma: no cover - safe import
 
 def main() -> None:
     log(f"MCP server starting... log: {LOG_FILE}")
-    # mcp.run(transport="stdio")
+
+    # Wrap the MCP SSE app with auth middleware
+    from auth.mcp_middleware import MCPAuthMiddleware
+
     mcp.settings.host = "0.0.0.0"
     mcp.settings.port = 8001
-    mcp.run(transport="sse")
+
+    # Get the underlying Starlette app and wrap with auth middleware
+    sse_app = mcp.sse_app()
+    wrapped_app = MCPAuthMiddleware(sse_app)
+
+    import uvicorn
+    log("Starting MCP SSE server with auth middleware on 0.0.0.0:8001")
+    uvicorn.run(wrapped_app, host="0.0.0.0", port=8001)
    
 
 
