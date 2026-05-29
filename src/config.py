@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     AI_BATCH_SIZE: int = 10
     # Feedback corrections settings
     FEEDBACK_CORRECTION_LIMIT: int = 10
+    # Figma integration settings
+    FIGMA_ACCESS_TOKEN: Optional[str] = None
 
     model_config = {
         "env_file": ENV_FILE,

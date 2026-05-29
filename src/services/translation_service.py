@@ -111,6 +111,9 @@ async def create_translation(
         type_ = translations.get("type")
         status = translations.get("status", "PENDING_REVIEW")
         created_by = translations.get("created_by")
+        figma_file_key = translations.get("figma_file_key")
+        figma_node_id = translations.get("figma_node_id")
+        figma_screenshot_url = translations.get("figma_screenshot_url")
         
         stmt = select(PepsiTranslation).where(
             PepsiTranslation.label == label,
@@ -125,7 +128,10 @@ async def create_translation(
             translation=translation, 
             type=type_,
             status=status,
-            created_by=created_by
+            created_by=created_by,
+            figma_file_key=figma_file_key,
+            figma_node_id=figma_node_id,
+            figma_screenshot_url=figma_screenshot_url
         )
         session.add(row)
         await session.flush()
@@ -161,6 +167,9 @@ async def create_translation(
             type_ = item.get("type")
             status = item.get("status", "PENDING_REVIEW")
             created_by = item.get("created_by")
+            figma_file_key = item.get("figma_file_key")
+            figma_node_id = item.get("figma_node_id")
+            figma_screenshot_url = item.get("figma_screenshot_url")
             
             stmt = select(PepsiTranslation).where(
                 PepsiTranslation.label == label,
@@ -174,6 +183,13 @@ async def create_translation(
                 existing.type = type_ or existing.type
                 existing.status = status or existing.status
                 existing.updated_by = created_by
+                # Update Figma fields if provided
+                if figma_file_key is not None:
+                    existing.figma_file_key = figma_file_key
+                if figma_node_id is not None:
+                    existing.figma_node_id = figma_node_id
+                if figma_screenshot_url is not None:
+                    existing.figma_screenshot_url = figma_screenshot_url
                 session.add(existing)
                 updated_count += 1
                 results.append({
@@ -200,7 +216,10 @@ async def create_translation(
                     translation=translation, 
                     type=type_,
                     status=status,
-                    created_by=created_by
+                    created_by=created_by,
+                    figma_file_key=figma_file_key,
+                    figma_node_id=figma_node_id,
+                    figma_screenshot_url=figma_screenshot_url
                 )
                 session.add(row)
                 await session.flush()
@@ -344,6 +363,9 @@ async def ai_translate(
         source_text = translations.get("source_text")
         target_language_codes = translations.get("target_language_codes")
         type_ = translations.get("type")
+        figma_file_key = translations.get("figma_file_key")
+        figma_node_id = translations.get("figma_node_id")
+        figma_screenshot_url = translations.get("figma_screenshot_url")
         
         # Validate language codes
         await validate_language_codes(session, target_language_codes)
@@ -405,10 +427,25 @@ async def ai_translate(
                 if existing:
                     existing.translation = translated_text
                     existing.type = type_ or existing.type
+                    # Update Figma fields if provided
+                    if figma_file_key is not None:
+                        existing.figma_file_key = figma_file_key
+                    if figma_node_id is not None:
+                        existing.figma_node_id = figma_node_id
+                    if figma_screenshot_url is not None:
+                        existing.figma_screenshot_url = figma_screenshot_url
                     session.add(existing)
                     upserted.append({"id": existing.id, "label": label, "language_code": lang_code, "translation": translated_text, "action": "updated"})
                 else:
-                    new_row = PepsiTranslation(label=label, language_code=lang_code, translation=translated_text, type=type_)
+                    new_row = PepsiTranslation(
+                        label=label, 
+                        language_code=lang_code, 
+                        translation=translated_text, 
+                        type=type_,
+                        figma_file_key=figma_file_key,
+                        figma_node_id=figma_node_id,
+                        figma_screenshot_url=figma_screenshot_url
+                    )
                     session.add(new_row)
                     await session.flush()
                     upserted.append({"id": new_row.id, "label": label, "language_code": lang_code, "translation": translated_text, "action": "created"})
@@ -511,11 +548,17 @@ async def ai_translate(
                                 if not label or not lang_code or not translated_text:
                                     continue
                                 
-                                # Find original item for type
+                                # Find original item for type and Figma fields
                                 type_ = None
+                                figma_file_key = None
+                                figma_node_id = None
+                                figma_screenshot_url = None
                                 for orig_item in batch:
                                     if orig_item.get("label") == label:
                                         type_ = orig_item.get("type")
+                                        figma_file_key = orig_item.get("figma_file_key")
+                                        figma_node_id = orig_item.get("figma_node_id")
+                                        figma_screenshot_url = orig_item.get("figma_screenshot_url")
                                         break
                                 
                                 stmt = select(PepsiTranslation).where(
@@ -526,10 +569,25 @@ async def ai_translate(
                                 if existing:
                                     existing.translation = translated_text
                                     existing.type = type_ or existing.type
+                                    # Update Figma fields if provided
+                                    if figma_file_key is not None:
+                                        existing.figma_file_key = figma_file_key
+                                    if figma_node_id is not None:
+                                        existing.figma_node_id = figma_node_id
+                                    if figma_screenshot_url is not None:
+                                        existing.figma_screenshot_url = figma_screenshot_url
                                     session.add(existing)
                                     all_upserted.append({"id": existing.id, "label": label, "language_code": lang_code, "translation": translated_text, "action": "updated"})
                                 else:
-                                    new_row = PepsiTranslation(label=label, language_code=lang_code, translation=translated_text, type=type_)
+                                    new_row = PepsiTranslation(
+                                        label=label, 
+                                        language_code=lang_code, 
+                                        translation=translated_text, 
+                                        type=type_,
+                                        figma_file_key=figma_file_key,
+                                        figma_node_id=figma_node_id,
+                                        figma_screenshot_url=figma_screenshot_url
+                                    )
                                     session.add(new_row)
                                     await session.flush()
                                     all_upserted.append({"id": new_row.id, "label": label, "language_code": lang_code, "translation": translated_text, "action": "created"})
@@ -595,11 +653,17 @@ async def ai_translate(
             if not label or not lang_code or not translated_text:
                 continue
             
-            # Find original item for type
+            # Find original item for type and Figma fields
             type_ = None
+            figma_file_key = None
+            figma_node_id = None
+            figma_screenshot_url = None
             for item in translations:
                 if item.get("label") == label:
                     type_ = item.get("type")
+                    figma_file_key = item.get("figma_file_key")
+                    figma_node_id = item.get("figma_node_id")
+                    figma_screenshot_url = item.get("figma_screenshot_url")
                     break
             
             stmt = select(PepsiTranslation).where(
@@ -610,10 +674,25 @@ async def ai_translate(
             if existing:
                 existing.translation = translated_text
                 existing.type = type_ or existing.type
+                # Update Figma fields if provided
+                if figma_file_key is not None:
+                    existing.figma_file_key = figma_file_key
+                if figma_node_id is not None:
+                    existing.figma_node_id = figma_node_id
+                if figma_screenshot_url is not None:
+                    existing.figma_screenshot_url = figma_screenshot_url
                 session.add(existing)
                 all_upserted.append({"id": existing.id, "label": label, "language_code": lang_code, "translation": translated_text, "action": "updated"})
             else:
-                new_row = PepsiTranslation(label=label, language_code=lang_code, translation=translated_text, type=type_)
+                new_row = PepsiTranslation(
+                    label=label, 
+                    language_code=lang_code, 
+                    translation=translated_text, 
+                    type=type_,
+                    figma_file_key=figma_file_key,
+                    figma_node_id=figma_node_id,
+                    figma_screenshot_url=figma_screenshot_url
+                )
                 session.add(new_row)
                 await session.flush()
                 all_upserted.append({"id": new_row.id, "label": label, "language_code": lang_code, "translation": translated_text, "action": "created"})

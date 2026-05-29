@@ -41,6 +41,7 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 > 6. **Approve translation** — approve a translation by ID or bulk approve by label
 > 7. **Reject translation** — reject a translation and optionally create feedback correction
 > 8. **View feedback corrections** — see recent feedback corrections for AI improvement
+> 9. **Sync Figma designs** — link translation keys to Figma screen designs and fetch screenshots for visual review
 >
 > What would you like to do?"
 
@@ -55,6 +56,7 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 > 7. **Approve translation** — approve a translation by ID or bulk approve by label
 > 8. **Reject translation** — reject a translation and optionally create feedback correction
 > 9. **View feedback corrections** — see recent feedback corrections for AI improvement
+> 10. **Sync Figma designs** — link translation keys to Figma screen designs and fetch screenshots for visual review
 >
 > What would you like to do?"
 
@@ -74,6 +76,9 @@ Users often describe what they want in plain language. **Before asking for param
 | "home label in nav" | `nav.home` |
 | "total in basket" | `basket.total` |
 | "pay now button" (no screen context) | Ask: *"Which screen or section does this belong to? (e.g. profile, nav, checkout)"* |
+| "sync figma for basket" / "link basket to figma" | Config Resolution Guard → Figma sync workflow |
+| "show figma info for basket.total" | `get_figma_info(label="basket.total")` |
+| "what figma node is basket.total" | `get_figma_info(label="basket.total")` |
 
 **Rules:**
 - Combine screen + key name with a dot: `{screen}.{key_name}`
@@ -126,6 +131,7 @@ Before confirming, validate ALL inputs against these rules:
 | `translation` | Non-empty string | `""`, `null` | `"Save"`, `"कुल"` |
 | `translation_id` | Positive integer | `"abc"`, `0`, `-1` | `1`, `42` |
 | Batch size | Max 10 per sync call | 11 items | ≤ 10 items |
+| `screen_id` | Lowercase, no spaces; if not in `figma_screens.json` → trigger Config Resolution Guard, do NOT fail hard | `"Basket Screen"` | `"basket"` |
 
 If any validation fails → tell the user **exactly** what's wrong and ask them to correct it. Do NOT proceed with invalid data.
 
@@ -148,6 +154,28 @@ After showing results, ask:
 
 ---
 
+## Figma Config Resolution Guard
+
+When the user requests anything Figma-related, run this check **before** any Figma tool call:
+
+```
+1. Extract screen_id from label (e.g., basket.total → screen_id = "basket")
+2. Call get_figma_screen_config(screen_id)
+   FOUND     → proceed with sync flow
+   NOT FOUND → ask: "What is the Figma page name for this screen?"
+               → Search config by page_name
+                  MATCH     → proceed
+                  NO MATCH  → ask: "Do you have the section node IDs from Figma?
+                               (right-click frame → Copy link → extract node-id)
+                               Or would you like to:
+                               A) Provide node IDs now → I'll save config and sync
+                               B) Continue without Figma for now"
+```
+
+Never fail hard — always offer to collect config or skip.
+
+---
+
 ## API Mode Flow
 
 When in **API mode**, use the `ai_translate` tool for adding translations.
@@ -166,25 +194,51 @@ When in **API mode**, use the `ai_translate` tool for adding translations.
      - If key exists for that locale → ask: "The label `{label}` already exists for locale `{language_code}` with value `{existing_value}`. Would you like to **update** it or **skip** this locale?"
      - Wait for user answer before proceeding
 
-3. **Build array for ai_translate:**
+3. **Figma node selection (Smart Matching):**
+   - Extract `screen_id` from label prefix (e.g., `basket.total` → `screen_id = "basket"`)
+   - Call `get_figma_screen_config(screen_id)` silently in background
+   - If screen config found:
+     a. Call `find_figma_node_by_text(screen_id, source_text)` silently
+     b. If match found:
+        - Call `get_figma_screenshot_url(figma_file_key, figma_node_id)`
+        - Show Figma preview with markdown: `![Figma Screenshot]({figma_screenshot_url})`
+        - Ask: "Is this the correct Figma frame? (yes/no)"
+        - If yes → store `{figma_file_key, figma_node_id, figma_screenshot_url}` for step 4
+        - If no → ask for manual Figma link or skip
+     c. If no match found:
+        - Ask: "No matching Figma node found. Paste a Figma node link manually or skip?"
+        - If manual → extract node-id from URL → call `get_figma_screenshot_url` → show preview → confirm
+        - If skip → proceed without Figma metadata
+   - If screen config not found:
+     - Ask: "No Figma config found for screen `{screen_id}`. Paste a Figma node link manually or skip?"
+     - Follow same manual link flow
+
+4. **Build array for ai_translate:**
    ```json
    [
      {
        "label": "basket.total",
        "source_text": "Total",
        "target_language_codes": ["en", "hi_IND"],
-       "type": "ui"
+       "type": "ui",
+       "figma_file_key": "...",  // only if Figma linked in step 3
+       "figma_node_id": "...",   // only if Figma linked in step 3
+       "figma_screenshot_url": "..."  // only if Figma linked in step 3
      }
    ]
    ```
 
-4. **Call ai_translate:**
+5. **Call ai_translate:**
    - Pass the array directly as the `translations` parameter
    - If ≤10 items → sync mode (returns results immediately with `{mode: "sync", total, upserted}`)
    - If >10 items → async mode (returns `{mode: "async", batch_id, status}`)
 
-5. **Handle results:**
-   - **Sync mode:** Show upserted translations in table format
+6. **Handle results:**
+   - **Sync mode:** Show upserted translations in table format with Figma preview (if linked)
+     > | # | Label | Locale | Translation | Figma Preview |
+     > |---|-------|--------|-------------|---------------|
+     > | 1 | basket.total | en | Total | ![Figma](screenshot_url) |
+     > | 2 | basket.total | hi_IND | कुल | ![Figma](screenshot_url) |
    - **Async mode:** Show batch_id and offer to poll with `get_batch_status`
 
 ### Viewing translations (API mode)
@@ -230,34 +284,56 @@ When in **Tool mode**, use the `create_translation` tool for adding translations
      - If key exists for that locale → ask: "The label `{label}` already exists for locale `{language_code}` with value `{existing_value}`. Would you like to **update** it or **skip** this locale?"
      - Wait for user answer before proceeding
 
-3. **IDE translates:**
+3. **Figma node selection (Smart Matching):**
+   - Extract `screen_id` from label prefix (e.g., `basket.total` → `screen_id = "basket"`)
+   - Call `get_figma_screen_config(screen_id)` silently in background
+   - If screen config found:
+     a. Call `find_figma_node_by_text(screen_id, value)` silently
+     b. If match found:
+        - Call `get_figma_screenshot_url(figma_file_key, figma_node_id)`
+        - Show Figma preview with markdown: `![Figma Screenshot]({figma_screenshot_url})`
+        - Ask: "Is this the correct Figma frame? (yes/no)"
+        - If yes → store `{figma_file_key, figma_node_id, figma_screenshot_url}` for step 6
+        - If no → ask for manual Figma link or skip
+     c. If no match found:
+        - Ask: "No matching Figma node found. Paste a Figma node link manually or skip?"
+        - If manual → extract node-id from URL → call `get_figma_screenshot_url` → show preview → confirm
+        - If skip → proceed without Figma metadata
+   - If screen config not found:
+     - Ask: "No Figma config found for screen `{screen_id}`. Paste a Figma node link manually or skip?"
+     - Follow same manual link flow
+
+4. **IDE translates:**
    - **You** (the AI assistant) translate the value for each selected locale
    - Use context if provided to produce accurate translations
    - Calculate confidence scores (0.0-1.0)
 
-4. **Show translations for review:**
-   Present all translations in a table:
+5. **Show translations for review:**
+   Present all translations in a table with Figma preview (if linked):
 
-   > | # | Label | Locale | Translation | Confidence |
-   > |---|-------|--------|-------------|------------|
-   > | 1 | basket.total | en | Total | 1.0 |
-   > | 2 | basket.total | hi_IND | कुल | 0.95 |
+   > | # | Label | Locale | Translation | Confidence | Figma Preview |
+   > |---|-------|--------|-------------|------------|---------------|
+   > | 1 | basket.total | en | Total | 1.0 | ![Figma](screenshot_url) |
+   > | 2 | basket.total | hi_IND | कुल | 0.95 | ![Figma](screenshot_url) |
    >
    > *"Do these translations look correct? You can ask me to change any of them before saving."*
+   > - Include Figma preview column only if Figma was linked in step 3
+   > - Show screenshot as markdown image
 
-5. **WAIT for user approval:**
+6. **WAIT for user approval:**
    - If user wants changes, fix and redisplay the full table
    - Repeat until approved
 
-6. **Build array for create_translation:**
+7. **Build array for create_translation:**
    ```json
    [
-     {"label": "basket.total", "language_code": "en", "translation": "Total", "type": "ui"},
-     {"label": "basket.total", "language_code": "hi_IND", "translation": "कुल", "type": "ui"}
+     {"label": "basket.total", "language_code": "en", "translation": "Total", "type": "ui", "figma_file_key": "...", "figma_node_id": "...", "figma_screenshot_url": "..."},
+     {"label": "basket.total", "language_code": "hi_IND", "translation": "कुल", "type": "ui", "figma_file_key": "...", "figma_node_id": "...", "figma_screenshot_url": "..."}
    ]
    ```
+   - Include Figma fields only if linked in step 3
 
-7. **Call create_translation:**
+8. **Call create_translation:**
    - Pass the array directly as the `translations` parameter
    - Returns `{total, created, updated, results}`
    - Show results (created/updated counts)
@@ -598,6 +674,153 @@ GET /translations/batch/{batch_id}/download?format=csv|json
 ```
 
 This is useful when users want direct API access without Windsurf/GitHub Copilot.
+
+---
+
+## Figma Integration (API Mode & Tool Mode)
+
+### When to use
+- User wants to link a translation key to its Figma design frame
+- User provides a label that should match a Figma frame name
+- User wants visual confirmation of the Figma frame before linking
+
+### Figma Sync Workflow
+
+Step-by-step orchestration flow when user triggers Figma sync (also used inline during Figma node selection steps in translation flows).
+
+```
+1. get_figma_screen_config(screen_id)
+   → get file_key + page_name + node_ids
+
+2. Build a Figma URL for EACH configured node:
+   https://www.figma.com/file/{file_key}?node-id={node_id}
+
+3. Show the list to the user:
+   "Here are the Figma sections for screen `{screen_id}`.
+    Open each link and pick the one that contains your text:
+
+    1. https://www.figma.com/file/{file_key}?node-id=35773:267354
+    2. https://www.figma.com/file/{file_key}?node-id=35773:267356
+    3. https://www.figma.com/file/{file_key}?node-id=35505:113695
+    4. None of these (paste a different node link)
+    5. Skip"
+
+   WAIT for user response:
+     1/2/3  → use that node_id → call get_figma_screenshot_url → show preview
+              → ask: "Is this correct? (yes/no)" → WAIT for confirmation
+     4      → ask for link/node ID → extract → call get_figma_screenshot_url → show preview → confirm
+     5      → leave unlinked
+
+4. Show summary table:
+   | Label           | Node selected    | Screenshot URL        |
+   |-----------------|------------------|-----------------------|
+   | basket.total    | 35773:267354     | https://cdn.figma...  |
+   | home.flash_deal | (skipped)        | —                     |
+```
+
+### Figma MCP Tools Reference
+
+#### get_figma_screenshot_url
+**When:** After finding a Figma node, fetch its screenshot
+**Required:** `figma_file_key`, `figma_node_id`
+**Returns:** `{figma_file_key, figma_node_id, screenshot_url}`
+
+#### find_figma_node_by_text
+**When:** User wants to find Figma frame(s) by exact name match
+**Required:** `screen_id`
+**Optional:** `default_text` (single text) OR `default_texts` (list of texts for batch mode)
+**Returns:** 
+- Single mode: `{figma_file_key, figma_node_id}` or `{figma_node_id: None}`
+- Batch mode: `{text: {figma_file_key, figma_node_id}}` for each text
+
+Single mode example:
+```json
+{
+  "screen_id": "home",
+  "default_text": "Easy Order"
+}
+```
+
+Batch mode example:
+```json
+{
+  "screen_id": "home",
+  "default_texts": ["Easy Order", "Shop by Brands"]
+}
+```
+
+Batch mode response:
+```json
+{
+  "Easy Order": {
+    "figma_file_key": "Fr5237RlW3syTjaBAB1kMN",
+    "figma_node_id": "35773:133679"
+  },
+  "Shop by Brands": {
+    "figma_file_key": "Fr5237RlW3syTjaBAB1kMN",
+    "figma_node_id": "I35773:133684;31011:251158"
+  }
+}
+```
+
+#### get_figma_screen_config
+**When:** Check available screen configurations
+**Optional:** `screen_id` (if omitted, returns full mapping)
+**Returns:** Screen config dict or full mapping
+
+### Batch Figma Search Optimization
+
+When adding multiple translations from the same screen, use batch search to reduce API calls:
+
+**When to use:**
+- User provides multiple labels from the same screen (e.g., `home.easy_order`, `home.shop_by_brands`)
+- Both labels have the same screen_id prefix
+
+**Optimized workflow:**
+```
+1. Group labels by screen_id
+   - home.easy_order, home.shop_by_brands → screen_id = "home" (2 items)
+   - basket.total → screen_id = "basket" (1 item)
+
+2. For each screen_id with multiple labels:
+   - Call find_figma_node_by_text(screen_id, default_texts=[text1, text2, ...])
+   - Single API call fetches all frames for that screen
+   - Returns map: {text: {figma_file_key, figma_node_id}}
+
+3. For labels not found in batch:
+   - Fall back to individual find_figma_node_by_text or manual link
+
+4. For screens with single label:
+   - Use find_figma_node_by_text(screen_id, default_text=text) (no change)
+```
+
+**Benefits:**
+- Fewer Figma API calls (1 per screen vs 1 per label)
+- Better performance for bulk additions
+- Reduced rate limit usage
+
+**Example batch response:**
+```json
+{
+  "Easy Order": {
+    "figma_file_key": "Fr5237RlW3syTjaBAB1kMN",
+    "figma_node_id": "35773:133679"
+  },
+  "Shop by Brands": {
+    "figma_file_key": "Fr5237RlW3syTjaBAB1kMN",
+    "figma_node_id": "I35773:133684;31011:251158"
+  }
+}
+```
+
+### Important Notes
+
+- **screen_id parameter** in find_figma_node_by_text is for config lookup from figma_screens.json
+- **screen_id database field** in Translation model is NOT used for Figma integration
+- **Exact match only:** Figma frame name must match the label exactly (case-insensitive, stripped)
+- **Visual confirmation:** Always show screenshot before saving Figma metadata
+- **Manual fallback:** If automatic matching fails, allow manual Figma link input
+- **Batch optimization:** Group labels by screen_id and use batch search for multiple labels from same screen
 
 ### get_batch_status
 **When:** API mode only — user wants to check progress of async batch

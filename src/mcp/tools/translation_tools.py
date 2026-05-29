@@ -4,7 +4,7 @@ Expose a `register(mcp, log)` function that attaches MCP tools to the
 provided `mcp` FastMCP instance. This avoids circular imports where tools
 import `mcp` from `src.mcp.server` at module import time.
 """
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 def register(mcp, log) -> None:
@@ -337,4 +337,164 @@ def register(mcp, log) -> None:
         except Exception as exc:
             log(f"get_feedback_corrections_error: {exc}")
             return [{"error": str(exc)}]
+
+    @mcp.tool()
+    async def get_figma_screenshot_url(figma_file_key: str, figma_node_id: str) -> dict:
+        """Fetch screenshot URL for a Figma node.
+        
+        Args:
+            figma_file_key: Figma file key
+            figma_node_id: Figma node ID
+            
+        Returns dict with figma_file_key, figma_node_id, screenshot_url.
+        On error returns an error dict.
+        """
+        log(f"mcp.get_figma_screenshot_url called file_key={figma_file_key} node_id={figma_node_id}")
+
+        from ai.figma_client import fetch_image_urls
+
+        try:
+            screenshot = await fetch_image_urls(figma_file_key, [figma_node_id])
+            screenshot_url = screenshot.get(figma_node_id)
+            log(f"get_figma_screenshot_url completed screenshot_url={screenshot_url}")
+            return {
+                "figma_file_key": figma_file_key,
+                "figma_node_id": figma_node_id,
+                "screenshot_url": screenshot_url,
+            }
+        except Exception as exc:
+            log(f"get_figma_screenshot_url_error: {exc}")
+            return {"error": str(exc)}
+
+    @mcp.tool()
+    async def find_figma_node_by_text(
+        screen_id: str,
+        default_text: Optional[str] = None,
+        default_texts: Optional[List[str]] = None
+    ) -> dict:
+        """Find Figma node(s) by exact frame name match.
+
+        Supports both single and batch search:
+        - If default_text provided: Returns {"figma_file_key": "...", "figma_node_id": "..."}
+        - If default_texts provided: Returns {text: {"figma_file_key": "...", "figma_node_id": "..."}} for each text
+
+        Args:
+            screen_id: Screen identifier for config lookup (e.g., "home", "basket")
+            default_text: Single text to search for (optional)
+            default_texts: List of texts to search for (optional, for batch mode)
+
+        Returns single result dict or batch results dict depending on mode.
+        On error returns an error dict.
+        """
+        log(f"mcp.find_figma_node_by_text called screen_id={screen_id} default_text={default_text} default_texts={default_texts}")
+
+        from services.figma_service import find_node_by_text
+
+        try:
+            result = await find_node_by_text(screen_id, default_text=default_text, default_texts=default_texts)
+            if isinstance(result, dict) and "figma_file_key" in result and "figma_node_id" in result:
+                log(f"find_figma_node_by_text completed single mode figma_node_id={result.get('figma_node_id')}")
+            else:
+                found_count = sum(1 for r in result.values() if r.get("figma_node_id")) if isinstance(result, dict) else 0
+                log(f"find_figma_node_by_text completed batch mode total={len(result) if isinstance(result, dict) else 0} found={found_count}")
+            return result
+        except Exception as exc:
+            log(f"find_figma_node_by_text_error: {exc}")
+            return {"error": str(exc)}
+
+    @mcp.tool()
+    async def get_figma_screen_config(screen_id: Optional[str] = None) -> dict:
+        """Get Figma screen configuration from figma_screens.json.
+        
+        Args:
+            screen_id: Optional screen identifier. If omitted, returns full mapping.
+            
+        Returns screen config dict or full mapping.
+        On error returns an error dict.
+        """
+        log(f"mcp.get_figma_screen_config called screen_id={screen_id}")
+
+        from services.figma_service import get_screen_config
+
+        try:
+            if screen_id:
+                result = get_screen_config(screen_id)
+            else:
+                import json
+                import os
+                config_path = os.path.join(os.path.dirname(__file__), "..", "..", "figma_screens.json")
+                with open(config_path, "r", encoding="utf-8") as f:
+                    result = json.load(f)
+            log(f"get_figma_screen_config completed")
+            return result or {}
+        except Exception as exc:
+            log(f"get_figma_screen_config_error: {exc}")
+            return {"error": str(exc)}
+
+    # Commented out - not needed as of now
+    # @mcp.tool()
+    # async def update_translation_figma(
+    #     label: str,
+    #     language_code: str,
+    #     figma_file_key: str,
+    #     figma_node_id: str,
+    # ) -> dict:
+    #     """Fetch screenshot URL and update Figma metadata for a translation.
+    #
+    #     Args:
+    #         label: Translation label
+    #         language_code: Language code (e.g., "en", "hi_IND")
+    #         figma_file_key: Figma file key
+    #         figma_node_id: Figma node ID
+    #
+    #     Returns updated translation dict with Figma metadata.
+    #     On error returns an error dict.
+    #     """
+    #     log(f"mcp.update_translation_figma called label={label} language_code={language_code}")
+    #
+    #     from services.figma_service import update_figma_metadata
+    #     from ai.figma_client import fetch_image_urls
+    #
+    #     try:
+    #         # Fetch screenshot
+    #         screenshot = await fetch_image_urls(figma_file_key, [figma_node_id])
+    #         screenshot_url = screenshot.get(figma_node_id)
+    #
+    #         # Update metadata
+    #         from db.session import get_session
+    #         async for session in get_session():
+    #             result = await update_figma_metadata(
+    #                 session, label, language_code, figma_file_key, figma_node_id, screenshot_url
+    #             )
+    #             log(f"update_translation_figma completed figma_screenshot_url={screenshot_url}")
+    #             return result
+    #     except Exception as exc:
+    #         log(f"update_translation_figma_error: {exc}")
+    #         return {"error": str(exc)}
+
+    # Commented out - not needed as of now
+    # @mcp.tool()
+    # async def get_figma_info(label: str, language_code: str) -> dict:
+    #     """Retrieve stored Figma metadata for a translation.
+    #
+    #     Args:
+    #         label: Translation label
+    #         language_code: Language code
+    #
+    #     Returns dict with figma_file_key, figma_node_id, figma_screenshot_url, figma_url.
+    #     On error returns an error dict.
+    #     """
+    #     log(f"mcp.get_figma_info called label={label} language_code={language_code}")
+    #
+    #     from services.figma_service import get_figma_info
+    #
+    #     try:
+    #         from db.session import get_session
+    #         async for session in get_session():
+    #             result = await get_figma_info(session, label, language_code)
+    #             log(f"get_figma_info completed")
+    #             return result or {}
+    #     except Exception as exc:
+    #         log(f"get_figma_info_error: {exc}")
+    #         return {"error": str(exc)}
 

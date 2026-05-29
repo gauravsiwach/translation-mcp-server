@@ -82,3 +82,43 @@ def mock_feedback_correction():
     correction.corrected_by = "system_user"
     correction.created_at = datetime.now()
     return correction
+
+
+@pytest.fixture
+def mock_figma_document():
+    """Mock Figma document response."""
+    document = {
+        "type": "DOCUMENT",
+        "document": {
+            "type": "DOCUMENT",
+            "children": [
+                {
+                    "type": "FRAME",
+                    "id": "35773:133679",
+                    "name": "Easy Order",
+                    "children": [
+                        {
+                            "type": "TEXT",
+                            "id": "35773:133680",
+                            "name": "Text",
+                            "characters": "Easy Order"
+                        }
+                    ]
+                },
+                {
+                    "type": "FRAME",
+                    "id": "I35773:133684;31011:251158",
+                    "name": "Shop by Brands",
+                    "children": [
+                        {
+                            "type": "TEXT",
+                            "id": "35773:133685",
+                            "name": "Text",
+                            "characters": "Shop by Brands"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    return document
