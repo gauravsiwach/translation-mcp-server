@@ -36,7 +36,7 @@ class TestDevTokens:
         
     def test_viewer_token_exists(self):
         """Test viewer dev token exists."""
-        assert "viewer-test-token" in DEV_TOKENS
+        assert "bdr-test-token" in DEV_TOKENS
         
     def test_dev_tokens_have_payloads(self):
         """Test dev tokens have payload dictionaries."""
@@ -51,8 +51,8 @@ class TestDevTokens:
         assert "SuperAdmin" in DEV_TOKENS["super-admin-test-token"]["roles"]
         # BUAdmin token should have BUAdmin role
         assert "BUAdmin" in DEV_TOKENS["bu-admin-test-token"]["roles"]
-        # Viewer token should have Viewer role
-        assert "Viewer" in DEV_TOKENS["viewer-test-token"]["roles"]
+        # BDR token should have BDR role
+        assert "BDR" in DEV_TOKENS["bdr-test-token"]["roles"]
 
 
 class TestAuthenticationDependencies:
@@ -60,7 +60,7 @@ class TestAuthenticationDependencies:
     
     def test_dev_tokens_cover_all_roles(self):
         """Test dev tokens cover all roles."""
-        all_roles = {Role.SUPER_ADMIN.value, Role.BU_ADMIN.value, Role.VIEWER.value}
+        all_roles = {r.value for r in Role}
         token_roles = set()
         
         for token, payload in DEV_TOKENS.items():
@@ -111,16 +111,16 @@ class TestRolePermissionMapping:
         
         super_admin_count = len(ROLE_PERMISSIONS[Role.SUPER_ADMIN])
         bu_admin_count = len(ROLE_PERMISSIONS[Role.BU_ADMIN])
-        viewer_count = len(ROLE_PERMISSIONS[Role.VIEWER])
+        viewer_count = len(ROLE_PERMISSIONS[Role.BDR])
         
         assert super_admin_count >= bu_admin_count
         assert bu_admin_count >= viewer_count
     
     def test_viewer_has_minimum_permissions(self):
-        """Test Viewer has at least read permissions."""
+        """Test BDR has at least read permissions."""
         from auth.permissions import ROLE_PERMISSIONS
         
-        viewer_perms = ROLE_PERMISSIONS[Role.VIEWER]
+        viewer_perms = ROLE_PERMISSIONS[Role.BDR]
         assert len(viewer_perms) > 0
         
         # Should have at least LIST or GET permissions (read operations)
@@ -140,28 +140,28 @@ class TestRBACCompliance:
     """Test overall RBAC design compliance."""
     
     def test_least_privilege_principle(self):
-        """Test least privilege principle - Viewer has fewest permissions."""
+        """Test least privilege principle - BDR has fewest permissions."""
         from auth.permissions import ROLE_PERMISSIONS
         
-        viewer_count = len(ROLE_PERMISSIONS[Role.VIEWER])
+        viewer_count = len(ROLE_PERMISSIONS[Role.BDR])
         bu_admin_count = len(ROLE_PERMISSIONS[Role.BU_ADMIN])
         super_admin_count = len(ROLE_PERMISSIONS[Role.SUPER_ADMIN])
         
         assert viewer_count <= bu_admin_count <= super_admin_count
     
     def test_role_hierarchy_clear(self):
-        """Test role hierarchy is clear (Super > BU > Viewer)."""
+        """Test role hierarchy is clear (Super > BU > BDR)."""
         # All roles exist and are distinct
         assert Role.SUPER_ADMIN != Role.BU_ADMIN
-        assert Role.BU_ADMIN != Role.VIEWER
-        assert Role.SUPER_ADMIN != Role.VIEWER
+        assert Role.BU_ADMIN != Role.BDR
+        assert Role.SUPER_ADMIN != Role.BDR
     
     def test_permission_isolation(self):
         """Test critical permissions are properly isolated."""
         from auth.permissions import ROLE_PERMISSIONS
         
         # MANAGE_USERS should only be available to SuperAdmin
-        for role in [Role.BU_ADMIN, Role.VIEWER]:
+        for role in [Role.BU_ADMIN, Role.BDR]:
             assert Permission.MANAGE_USERS not in ROLE_PERMISSIONS[role]
         
         # SuperAdmin should have it

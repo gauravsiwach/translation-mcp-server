@@ -125,8 +125,8 @@ class TestSessionAuthStore:
         # Clear store
         _session_auth.clear()
 
-        # Simulate: contextvar has default 'Viewer' (GET /sse task)
-        set_auth_context(role="Viewer")
+        # Simulate: contextvar has default 'BDR' (GET /sse task)
+        set_auth_context(role="BDR")
 
         # Simulate: POST /messages/ stored SuperAdmin in session store
         _session_auth["test-session-123"] = {
@@ -149,8 +149,8 @@ class TestSessionAuthStore:
         from auth.mcp_middleware import _session_auth
         from auth.context import set_auth_context
 
-        # Set contextvar to default Viewer (simulates GET task)
-        set_auth_context(role="Viewer")
+        # Set contextvar to default BDR (simulates GET task)
+        set_auth_context(role="BDR")
 
         # Store SuperAdmin in session store (simulates POST task)
         _session_auth.clear()
@@ -173,13 +173,13 @@ class TestSessionAuthStore:
 
     @pytest.mark.asyncio
     async def test_require_denies_when_no_session_auth(self):
-        """Test that @require denies when contextvar=Viewer and no session auth."""
+        """Test that @require denies when contextvar=BDR and no session auth."""
         from auth.require import require
         from auth.mcp_middleware import _session_auth
         from auth.context import set_auth_context
 
-        # Set contextvar to Viewer, clear session store
-        set_auth_context(role="Viewer")
+        # Set contextvar to BDR, clear session store
+        set_auth_context(role="BDR")
         _session_auth.clear()
 
         @require(Permission.CREATE_TRANSLATION)

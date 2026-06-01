@@ -21,17 +21,41 @@ DEV_TOKENS: dict[str, dict] = {
         "oid": "test-oid-001",
         "roles": ["SuperAdmin"],
     },
+    "sustain-admin-test-token": {
+        "preferred_username": "sustainadmin@test.com",
+        "name": "Test SustainAdmin",
+        "oid": "test-oid-002",
+        "roles": ["SustainAdmin"],
+    },
     "bu-admin-test-token": {
         "preferred_username": "buadmin@test.com",
         "name": "Test BUAdmin",
-        "oid": "test-oid-002",
+        "oid": "test-oid-003",
         "roles": ["BUAdmin"],
     },
-    "viewer-test-token": {
-        "preferred_username": "viewer@test.com",
-        "name": "Test Viewer",
-        "oid": "test-oid-003",
-        "roles": ["Viewer"],
+    "cs-agent-test-token": {
+        "preferred_username": "csagent@test.com",
+        "name": "Test CustomerServiceAgent",
+        "oid": "test-oid-004",
+        "roles": ["CustomerServiceAgent"],
+    },
+    "sustain-user-test-token": {
+        "preferred_username": "sustainuser@test.com",
+        "name": "Test SustainUser",
+        "oid": "test-oid-005",
+        "roles": ["SustainUser"],
+    },
+    "bdr-supervisor-test-token": {
+        "preferred_username": "bdrsupervisor@test.com",
+        "name": "Test BDRSupervisor",
+        "oid": "test-oid-006",
+        "roles": ["BDRSupervisor"],
+    },
+    "bdr-test-token": {
+        "preferred_username": "bdr@test.com",
+        "name": "Test BDR",
+        "oid": "test-oid-007",
+        "roles": ["BDR"],
     },
 }
 

@@ -53,12 +53,14 @@ def extract_role(token_payload: dict) -> Role:
     """Extract the highest-privilege role from token claims.
 
     Azure AD puts roles in the 'roles' claim (App Roles).
-    Falls back to Viewer if no recognized role is found.
+    Falls back to BDR (read-only) if no recognized role is found.
+    Priority order: SuperAdmin > SustainAdmin > BUAdmin > others (read-only).
     """
     roles = token_payload.get("roles", [])
 
-    if Role.SUPER_ADMIN.value in roles:
-        return Role.SUPER_ADMIN
-    if Role.BU_ADMIN.value in roles:
-        return Role.BU_ADMIN
-    return Role.VIEWER
+    # Check in priority order (highest privilege first)
+    for role in Role:
+        if role.value in roles:
+            return role
+
+    return Role.BDR

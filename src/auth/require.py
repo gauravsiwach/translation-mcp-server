@@ -41,7 +41,7 @@ def check_permission(permission: Permission) -> str:
     try:
         role = Role(role_str)
     except ValueError:
-        role = Role.VIEWER
+        role = Role.BDR
 
     if not has_permission(role, permission):
         logger.warning("access_denied", role=role.value, permission=permission.value)
@@ -67,32 +67,39 @@ def require(permission: Permission):
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            # Priority 1: explicit user_role kwarg (testing, stdio transport)
+            # Priority 1: explicit user_role kwarg (testing only)
             user_role_str = kwargs.pop("user_role", None)
 
             if user_role_str:
                 try:
                     role = Role(user_role_str)
                 except ValueError:
-                    role = Role.VIEWER
+                    role = Role.BDR
             else:
-                # Priority 2: request-scoped context (set by middleware)
-                role_str = get_current_role()
+                # Priority 2: session auth store (SSE transport — bridges GET/POST task boundary)
+                role_str = None
+                try:
+                    from auth.mcp_middleware import get_latest_session_auth
+                    session_auth = get_latest_session_auth()
+                    if session_auth:
+                        role_str = session_auth["role"]
+                except ImportError:
+                    pass
 
-                # Priority 3: session auth store (bridges SSE GET/POST task boundary)
-                if role_str == "Viewer":
-                    try:
-                        from auth.mcp_middleware import get_latest_session_auth
-                        session_auth = get_latest_session_auth()
-                        if session_auth:
-                            role_str = session_auth["role"]
-                    except ImportError:
-                        pass
+                # Priority 3: request-scoped contextvar
+                if not role_str or role_str == "Viewer":
+                    from auth.context import get_current_role
+                    ctx_role = get_current_role()
+                    if ctx_role != "Viewer":
+                        role_str = ctx_role
+
+                if not role_str:
+                    role_str = "Viewer"
 
                 try:
                     role = Role(role_str)
                 except ValueError:
-                    role = Role.VIEWER
+                    role = Role.BDR
 
             if not has_permission(role, permission):
                 logger.warning("access_denied", func=func.__name__, role=role.value, permission=permission.value)

@@ -29,16 +29,16 @@ class TestRBACHierarchy:
     def test_bu_admin_middle_privileges(self):
         """Test BUAdmin has middle privileges."""
         bu_admin_perms = ROLE_PERMISSIONS[Role.BU_ADMIN]
-        viewer_perms = ROLE_PERMISSIONS[Role.VIEWER]
+        viewer_perms = ROLE_PERMISSIONS[Role.BDR]
         
-        # BUAdmin has more permissions than Viewer
+        # BUAdmin has more permissions than BDR
         assert len(bu_admin_perms) >= len(viewer_perms)
     
     def test_viewer_lowest_privileges(self):
-        """Test Viewer has lowest privileges."""
-        viewer_perms = ROLE_PERMISSIONS[Role.VIEWER]
+        """Test BDR has lowest privileges."""
+        viewer_perms = ROLE_PERMISSIONS[Role.BDR]
         
-        # Viewer should have some read permissions
+        # BDR should have some read permissions
         assert len(viewer_perms) > 0
 
 
@@ -61,14 +61,14 @@ class TestPermissionGrants:
         assert Permission.APPROVE_TRANSLATION in bu_admin_perms
     
     def test_viewer_can_only_read(self):
-        """Test Viewer can only read translations."""
-        viewer_perms = ROLE_PERMISSIONS[Role.VIEWER]
+        """Test BDR can only read translations."""
+        viewer_perms = ROLE_PERMISSIONS[Role.BDR]
         
-        # Viewer should have read permissions
+        # BDR should have read permissions
         assert Permission.LIST_TRANSLATIONS in viewer_perms
         assert Permission.GET_TRANSLATION in viewer_perms
         
-        # Viewer should NOT have write permissions
+        # BDR should NOT have write permissions
         assert Permission.CREATE_TRANSLATION not in viewer_perms
         assert Permission.UPDATE_TRANSLATION not in viewer_perms
         assert Permission.DELETE_TRANSLATION not in viewer_perms
@@ -88,8 +88,8 @@ class TestPermissionValidation:
         for perm in Permission:
             assert has_permission(Role.SUPER_ADMIN, perm) is True
         
-        # Viewer should not have create permission
-        assert has_permission(Role.VIEWER, Permission.CREATE_TRANSLATION) is False
+        # BDR should not have create permission
+        assert has_permission(Role.BDR, Permission.CREATE_TRANSLATION) is False
     
     def test_admin_only_permissions(self):
         """Test certain permissions only belong to SuperAdmin."""
@@ -100,8 +100,8 @@ class TestPermissionValidation:
             assert has_permission(Role.SUPER_ADMIN, perm) is True
             # BUAdmin should NOT have it
             assert has_permission(Role.BU_ADMIN, perm) is False
-            # Viewer should NOT have it
-            assert has_permission(Role.VIEWER, perm) is False
+            # BDR should NOT have it
+            assert has_permission(Role.BDR, perm) is False
 
 
 class TestRoleBasedWorkflows:
@@ -113,23 +113,23 @@ class TestRoleBasedWorkflows:
         assert has_permission(Role.SUPER_ADMIN, Permission.CREATE_TRANSLATION)
         # BUAdmin can update existing translations
         assert has_permission(Role.BU_ADMIN, Permission.UPDATE_TRANSLATION)
-        # Viewer cannot modify
-        assert not has_permission(Role.VIEWER, Permission.UPDATE_TRANSLATION)
+        # BDR cannot modify
+        assert not has_permission(Role.BDR, Permission.UPDATE_TRANSLATION)
     
     def test_translation_approval_workflow(self):
         """Test translation approval workflow permissions."""
         # BUAdmin can approve
         assert has_permission(Role.BU_ADMIN, Permission.APPROVE_TRANSLATION)
-        # Viewer cannot approve
-        assert not has_permission(Role.VIEWER, Permission.APPROVE_TRANSLATION)
+        # BDR cannot approve
+        assert not has_permission(Role.BDR, Permission.APPROVE_TRANSLATION)
         # SuperAdmin can also approve
         assert has_permission(Role.SUPER_ADMIN, Permission.APPROVE_TRANSLATION)
     
     def test_read_only_viewer_workflow(self):
-        """Test read-only Viewer workflow."""
-        viewer_perms = ROLE_PERMISSIONS[Role.VIEWER]
+        """Test read-only BDR workflow."""
+        viewer_perms = ROLE_PERMISSIONS[Role.BDR]
         
-        # Viewer can see translations
+        # BDR can see translations
         read_perms = {
             Permission.LIST_TRANSLATIONS,
             Permission.GET_TRANSLATION,
@@ -146,8 +146,8 @@ class TestLeastPrivilegePrinciple:
     
     def test_permissions_not_granted_unnecessarily(self):
         """Test permissions are not granted unnecessarily."""
-        # Viewer should not have any write permission
-        viewer_perms = ROLE_PERMISSIONS[Role.VIEWER]
+        # BDR should not have any write permission
+        viewer_perms = ROLE_PERMISSIONS[Role.BDR]
         
         write_perms = {
             Permission.CREATE_TRANSLATION,
@@ -157,7 +157,7 @@ class TestLeastPrivilegePrinciple:
             Permission.MANAGE_USERS,
         }
         
-        # Viewer should have none of the write permissions
+        # BDR should have none of the write permissions
         assert not any(perm in viewer_perms for perm in write_perms)
     
     def test_critical_permissions_restricted(self):
@@ -168,7 +168,7 @@ class TestLeastPrivilegePrinciple:
         for perm in critical_perms:
             assert has_permission(Role.SUPER_ADMIN, perm)
             assert not has_permission(Role.BU_ADMIN, perm)
-            assert not has_permission(Role.VIEWER, perm)
+            assert not has_permission(Role.BDR, perm)
 
 
 class TestRBACCompleteness:
@@ -183,7 +183,7 @@ class TestRBACCompleteness:
     def test_permission_distribution(self):
         """Test permissions are distributed appropriately."""
         total_roles = len(list(Role))
-        assert total_roles == 3  # SuperAdmin, BUAdmin, Viewer
+        assert total_roles == 7  # SuperAdmin, SustainAdmin, BUAdmin, CustomerServiceAgent, SustainUser, BDRSupervisor, BDR
         
         total_perms = len(list(Permission))
         assert total_perms >= 8  # Reasonable minimum

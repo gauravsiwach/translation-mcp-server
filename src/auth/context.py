@@ -11,7 +11,7 @@ from contextvars import ContextVar
 from auth.permissions import Role
 
 # Stores the authenticated role for the current request/tool call
-_current_role: ContextVar[str] = ContextVar("_current_role", default="Viewer")
+_current_role: ContextVar[str] = ContextVar("_current_role", default="BDR")
 _current_email: ContextVar[str] = ContextVar("_current_email", default="anonymous")
 _current_token: ContextVar[str] = ContextVar("_current_token", default="")
 

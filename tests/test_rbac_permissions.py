@@ -36,14 +36,14 @@ class TestRoles:
         assert Role.BU_ADMIN in Role
         
     def test_role_viewer_exists(self):
-        """Test Viewer role exists."""
-        assert Role.VIEWER in Role
+        """Test BDR role exists."""
+        assert Role.BDR in Role
         
     def test_role_values_are_strings(self):
         """Test that role values are strings."""
         assert isinstance(Role.SUPER_ADMIN.value, str)
         assert isinstance(Role.BU_ADMIN.value, str)
-        assert isinstance(Role.VIEWER.value, str)
+        assert isinstance(Role.BDR.value, str)
 
 
 class TestPermissions:
@@ -84,7 +84,7 @@ class TestRolePermissionsMapping:
         """Test all roles are in ROLE_PERMISSIONS."""
         assert Role.SUPER_ADMIN in ROLE_PERMISSIONS
         assert Role.BU_ADMIN in ROLE_PERMISSIONS
-        assert Role.VIEWER in ROLE_PERMISSIONS
+        assert Role.BDR in ROLE_PERMISSIONS
         
     def test_super_admin_has_all_permissions(self):
         """Test SuperAdmin has all permissions."""
@@ -102,12 +102,12 @@ class TestRolePermissionsMapping:
         assert Permission.APPROVE_TRANSLATION in bu_admin_perms
         
     def test_viewer_read_only_permissions(self):
-        """Test Viewer has read-only permissions."""
-        viewer_perms = ROLE_PERMISSIONS[Role.VIEWER]
-        # Viewer should have only read permissions
+        """Test BDR has read-only permissions."""
+        viewer_perms = ROLE_PERMISSIONS[Role.BDR]
+        # BDR should have only read permissions
         assert Permission.LIST_TRANSLATIONS in viewer_perms
         assert Permission.GET_TRANSLATION in viewer_perms
-        # Viewer should NOT have write permissions
+        # BDR should NOT have write permissions
         assert Permission.CREATE_TRANSLATION not in viewer_perms
         assert Permission.UPDATE_TRANSLATION not in viewer_perms
         assert Permission.DELETE_TRANSLATION not in viewer_perms
@@ -129,16 +129,16 @@ class TestHasPermissionFunction:
             assert has_permission(Role.SUPER_ADMIN, perm) is True
             
     def test_viewer_has_read_permission(self):
-        """Test Viewer has read permission."""
-        assert has_permission(Role.VIEWER, Permission.LIST_TRANSLATIONS) is True
+        """Test BDR has read permission."""
+        assert has_permission(Role.BDR, Permission.LIST_TRANSLATIONS) is True
         
     def test_viewer_lacks_create_permission(self):
-        """Test Viewer lacks create permission."""
-        assert has_permission(Role.VIEWER, Permission.CREATE_TRANSLATION) is False
+        """Test BDR lacks create permission."""
+        assert has_permission(Role.BDR, Permission.CREATE_TRANSLATION) is False
         
     def test_viewer_lacks_approve_permission(self):
-        """Test Viewer lacks approve permission."""
-        assert has_permission(Role.VIEWER, Permission.APPROVE_TRANSLATION) is False
+        """Test BDR lacks approve permission."""
+        assert has_permission(Role.BDR, Permission.APPROVE_TRANSLATION) is False
         
     def test_bu_admin_has_approve_permission(self):
         """Test BUAdmin has approve permission."""
@@ -153,8 +153,11 @@ class TestHasPermissionFunction:
         assert has_permission(Role.BU_ADMIN, Permission.MANAGE_USERS) is False
         
     def test_function_with_invalid_permission(self):
-        """Test has_permission handles invalid permission gracefully."""
-        # Test that invalid role returns False
+        """Test has_permission handles invalid role gracefully."""
+        # Invalid role gets read-only (fallback to _READ_PERMISSIONS)
         result = has_permission("invalid_role", Permission.LIST_TRANSLATIONS)
+        assert result is True  # read-only access granted
+        # But write permissions should be denied
+        result = has_permission("invalid_role", Permission.CREATE_TRANSLATION)
         assert result is False
 
