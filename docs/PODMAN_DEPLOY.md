@@ -19,12 +19,6 @@ All commands are run manually from the repo root. No automation — copy-paste e
 podman build -t translation-mcp-server:latest .
 ```
 
-To tag with a version:
-
-```bash
-podman build -t translation-mcp-server:1.0.0 .
-```
-
 ---
 
 ## 2. Create a Podman Network (shared by all containers)
@@ -88,25 +82,7 @@ podman run -d \
 
 ---
 
-<!-- ## 6. Run Database Migrations (Alembic)
-
-Run migrations against the running app container:
-
-```bash
-podman exec -it translation-app \
-  bash -c "cd /app && alembic upgrade head"
-```
-
-Or seed the DB:
-
-```bash
-podman exec -it translation-app \
-  bash -c "cd /app && python src/db/seed.py"
-``` -->
-
----
-
-## 7. Verify Everything is Running
+## 6. Verify Everything is Running
 
 ```bash
 # List running containers
@@ -121,7 +97,7 @@ curl http://localhost:8001/sse
 
 ---
 
-## 8. View Logs
+## 7. View Logs
 
 ```bash
 # App logs
@@ -136,7 +112,7 @@ podman logs -f translation-db
 
 ---
 
-## 9. Stop and Remove Containers
+## 8. Stop and Remove Containers
 
 ```bash
 podman stop translation-app translation-mcp translation-db

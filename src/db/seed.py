@@ -1,46 +1,30 @@
 import asyncio
+from sqlalchemy import text
 from db.session import AsyncSession
-from db.models import Market, MarketLocale
 
-MARKETS = [
-    ("IN", "India", 34, ["en", "hi_IND"]),
-    ("MX", "Mexico", 21, ["es_MX", "en"]),
-    ("SA", "Saudi Arabia", 29, ["ar_SA", "en"]),
-    ("EG", "Egypt", 30, ["ar_EG", "en"]),
-    ("TR", "Turkey", 14, ["tr", "en"]),
-    ("ES", "Spain", 13, ["es", "en", "zh"]),
-    ("BR", "Brazil", 11, ["pt_BR", "en"]),
-    ("PL", "Poland", 25, ["pl_PL", "en"]),
-    ("TH", "Thailand", 24, ["th_TH", "en"]),
-    ("RO", "Romania", 18, ["ro", "en"]),
-    ("RU", "Russia", 15, ["ru", "en"]),
-    ("PT", "Portugal", 16, ["pt", "en"]),
-    ("CO", "Colombia", 7, ["es", "en"]),
-    ("CL", "Chile", 22, ["es_CL", "en"]),
-    ("AR", "Argentina", 28, ["es_AR", "en"]),
-    ("DO", "Dominican Republic", 20, ["es_DO", "en"]),
-    ("PE", "Peru", 32, ["es_PE", "en"]),
-    ("EC", "Ecuador", 33, ["es_EC", "en"]),
-    ("NZ", "New Zealand", 17, ["en"]),
-    ("MXW", "Mexico Wholesaler", 26, ["es_MX", "en"]),
-]
+async def seed_languages():
+    """Insert default languages if they don't exist"""
+    async with AsyncSession() as session:
+        default_languages = [
+            {"code": "en", "language": "English"},
+            {"code": "hi_IND", "language": "Hindi (India)"},
+        ]
+        for lang_data in default_languages:
+            existing = await session.execute(
+                text("SELECT language_code FROM customer_uat_ind.pepsi_languages WHERE language_code = :code"),
+                {"code": lang_data["code"]}
+            )
+            if not existing.first():
+                await session.execute(
+                    text("INSERT INTO customer_uat_ind.pepsi_languages (language_code, language) VALUES (:code, :language)"),
+                    lang_data
+                )
+        await session.commit()
+        print("Default languages seeded successfully.")
 
 async def run():
-    async with AsyncSession() as session:
-        # Insert markets if not present
-        for code, name, site_id, locales in MARKETS:
-            existing = await session.execute(
-                Market.__table__.select().where(Market.code == code)
-            )
-            row = existing.first()
-            if not row:
-                m = Market(code=code, name=name, site_id=site_id, is_active=True)
-                session.add(m)
-                await session.flush()
-                for i, locale in enumerate(locales):
-                    ml = MarketLocale(market_id=m.id, locale_code=locale, is_default=(i==0))
-                    session.add(ml)
-        await session.commit()
+    await seed_languages()
 
 if __name__ == "__main__":
     asyncio.run(run())
+

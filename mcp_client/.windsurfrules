@@ -42,6 +42,7 @@ Once the user picks a mode, respond with the matching capability list and WAIT f
 > 7. **Reject translation** — reject a translation and optionally create feedback correction
 > 8. **View feedback corrections** — see recent feedback corrections for AI improvement
 > 9. **Sync Figma designs** — link translation keys to Figma screen designs and fetch screenshots for visual review
+> 9. **Sync Figma designs** — link translation keys to Figma screen designs and fetch screenshots for visual review
 >
 > What would you like to do?"
 

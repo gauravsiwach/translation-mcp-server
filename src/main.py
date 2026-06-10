@@ -1,8 +1,11 @@
 from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse
 import time
+from sqlalchemy import text
 
 from db import session as db_session
+from db.models import Base
+from db.seed import seed_languages
 from api.router import router as api_router
 from utils.logger import get_logger
 from config import settings, ENV_FILE_EXISTS
@@ -60,10 +63,23 @@ async def startup_event():
                 except Exception:
                     logger.exception("db_auto_create_failed")
 
-            # NOTE: We intentionally do NOT call Base.metadata.create_all() here.
-            # The project now targets pre-existing production tables in
-            # `customer_uat_ind` and should not attempt to create or modify schema.
-            logger.info("db_startup_skipped_create_all")
+            # Create schema and tables if they don't exist
+            async with db_session.engine.begin() as conn:
+                # Create schema if it doesn't exist
+                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS customer_uat_ind"))
+            
+            # Create all tables (checkfirst=True ensures we don't recreate existing tables)
+            async with db_session.engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            
+            # Seed default languages
+            try:
+                await seed_languages()
+                logger.info("db_seeded_languages")
+            except Exception:
+                logger.exception("db_seed_languages_failed")
+            
+            logger.info("db_tables_created_or_verified")
         except Exception:
             logger.exception("db_startup_failed")
     else:
