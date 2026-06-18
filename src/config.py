@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     AI_BATCH_SIZE: int = 10
     # Feedback corrections settings
     FEEDBACK_CORRECTION_LIMIT: int = 10
+    # Environment & RBAC
+    ENV: str = "development"
+    AZURE_TENANT_ID: str = ""
+    AZURE_CLIENT_ID: str = ""
     # Figma integration settings
     FIGMA_ACCESS_TOKEN: Optional[str] = None
 

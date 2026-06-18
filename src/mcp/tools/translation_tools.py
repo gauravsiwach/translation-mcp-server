@@ -10,7 +10,11 @@ from typing import List, Optional, Union
 def register(mcp, log) -> None:
     """Register translation-related MCP tools on the given `mcp` instance."""
 
+    from auth.require import require
+    from auth.permissions import Permission
+
     @mcp.tool()
+    @require(Permission.LIST_LANGUAGES)
     async def list_languages() -> List[dict]:
         """Return all rows from pepsi_languages.
 
@@ -31,6 +35,7 @@ def register(mcp, log) -> None:
             return [{"error": str(exc)}]
 
     @mcp.tool()
+    @require(Permission.LIST_TRANSLATIONS)
     async def get_translations(
         language_code: Optional[str] = None,
         type: Optional[str] = None,
@@ -55,6 +60,7 @@ def register(mcp, log) -> None:
             return [{"error": str(exc)}]
 
     @mcp.tool()
+    @require(Permission.CREATE_TRANSLATION)
     async def create_translation(translations: List[dict]) -> dict:
         """Bulk upsert translations into pepsi_translations.
 
@@ -78,6 +84,7 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.UPDATE_TRANSLATION)
     async def update_translation(
         translation_id: Optional[int] = None,
         label: Optional[str] = None,
@@ -120,6 +127,7 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.AI_TRANSLATE)
     async def ai_translate(translations: List[dict]) -> dict:
         """Bulk AI translate labels across target language codes.
 
@@ -145,6 +153,7 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.GET_BATCH_STATUS)
     async def get_batch_status(batch_id: str) -> dict:
         """Get status of an async AI translation batch.
 
@@ -168,6 +177,7 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.LIST_TRANSLATIONS)
     async def download_translations(format: str = "csv") -> dict:
         """Download all translations from database as CSV or JSON.
 
@@ -217,6 +227,7 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.APPROVE_TRANSLATION)
     async def approve_translation(
         translation_id: int,
         performed_by: str = "system_user",
@@ -271,6 +282,7 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.REJECT_TRANSLATION)
     async def reject_translation(
         translation_id: int,
         performed_by: str = "system_user",
@@ -311,6 +323,7 @@ def register(mcp, log) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    @require(Permission.LIST_TRANSLATIONS)
     async def get_feedback_corrections(
         language_code: Optional[str] = None,
         limit: int = 10,

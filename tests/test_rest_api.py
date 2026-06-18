@@ -9,12 +9,23 @@ def cleanup_app_state():
     """Auto-cleanup fixture to reset app state between tests."""
     from main import app
     from services.translation_service import batch_status
-    
+    from auth.dependencies import get_current_user, CurrentUser
+    from auth.permissions import Role
+
     # Store original batch status
     original_batch_status = batch_status.copy()
-    
+
+    # Override auth to allow all requests as SuperAdmin in tests
+    async def mock_get_current_user():
+        return CurrentUser(
+            payload={"preferred_username": "test@test.com", "roles": ["SuperAdmin"], "oid": "test"},
+            role=Role.SUPER_ADMIN,
+        )
+
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+
     yield
-    
+
     # Clean up after test
     app.dependency_overrides.clear()
     # Reset module-level batch status

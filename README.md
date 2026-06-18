@@ -102,6 +102,144 @@ This service is a **centralized translation backend** that tackles the problem o
 
 > For the full developer setup guide (venv, migrations, MCP server, DB UI, Ollama): see **[docs/HELP_COMMANDS.md](docs/HELP_COMMANDS.md)**
 
+---
+
+## Authentication & RBAC
+
+The server uses **Azure AD (MSAL) Bearer tokens** for authentication. Both the REST API and MCP SSE server require an `Authorization: Bearer <token>` header.
+
+### Roles & Permissions
+
+| Role | Create | Update | AI Translate | Approve/Reject | Delete |
+|------|:------:|:------:|:------------:|:--------------:|:------:|
+| **Super Admin** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Sustain Admin** | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **BU Admin** | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **Customer Service Agent** | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Sustain User** | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **BDR Supervisor** | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **BDR** | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+> All roles have read access (list languages, list/get translations, batch status).
+
+### Dev Test Tokens (ENV=development)
+
+In development mode, the following static tokens can be used without Azure AD:
+
+| Token | Role |
+|-------|------|
+| `super-admin-test-token` | SuperAdmin |
+| `sustain-admin-test-token` | SustainAdmin |
+| `bu-admin-test-token` | BUAdmin |
+| `cs-agent-test-token` | CustomerServiceAgent |
+| `sustain-user-test-token` | SustainUser |
+| `bdr-supervisor-test-token` | BDRSupervisor |
+| `bdr-test-token` | BDR |
+
+### REST API — Sample Requests with Token
+
+```bash
+# List languages (any role)
+curl -H "Authorization: Bearer super-admin-test-token" \
+  http://localhost:8000/api/v1/languages
+
+# Create translation (requires SuperAdmin/SustainAdmin/BUAdmin)
+curl -X POST \
+  -H "Authorization: Bearer super-admin-test-token" \
+  -H "Content-Type: application/json" \
+  -d '{"translations": [{"label": "btn.submit", "language_code": "en", "translation": "Submit", "type": "ui"}]}' \
+  http://localhost:8000/api/v1/translations/bulk
+
+# AI Translate (requires SuperAdmin/SustainAdmin/BUAdmin)
+curl -X POST \
+  -H "Authorization: Bearer bu-admin-test-token" \
+  -H "Content-Type: application/json" \
+  -d '{"translations": [{"label": "btn.submit", "source_text": "Submit", "target_language_codes": ["hi", "ta"], "type": "ui"}]}' \
+  http://localhost:8000/api/v1/translations/ai-translate
+
+# Approve translation (requires SuperAdmin/SustainAdmin/BUAdmin)
+curl -X POST \
+  -H "Authorization: Bearer sustain-admin-test-token" \
+  -H "Content-Type: application/json" \
+  -d '{"performed_by": "admin@company.com"}' \
+  http://localhost:8000/api/v1/translations/1/approve
+
+# Read-only user attempt to create (will get 403)
+curl -X POST \
+  -H "Authorization: Bearer bdr-test-token" \
+  -H "Content-Type: application/json" \
+  -d '{"translations": [{"label": "test", "language_code": "en", "translation": "Test"}]}' \
+  http://localhost:8000/api/v1/translations/bulk
+# Response: {"detail": "Role 'BDR' lacks permission 'create_translation'"}
+```
+
+### MCP Server (SSE) — Client Configuration
+
+```jsonc
+// Add to your MCP client settings (VS Code, Claude Desktop, Cursor, etc.)
+{
+  "mcpServers": {
+    "translation-mcp-server-sse": {
+      "url": "http://localhost:8001/sse",
+      "headers": {
+        "Authorization": "Bearer super-admin-test-token"
+      }
+    }
+  }
+}
+```
+
+**Test with different roles:**
+
+```jsonc
+// BU Admin — can create, update, approve/reject but NOT delete
+{
+  "mcpServers": {
+    "translation-mcp-server-sse": {
+      "url": "http://localhost:8001/sse",
+      "headers": {
+        "Authorization": "Bearer bu-admin-test-token"
+      }
+    }
+  }
+}
+
+// BDR — read-only, will get access_denied on create/update
+{
+  "mcpServers": {
+    "translation-mcp-server-sse": {
+      "url": "http://localhost:8001/sse",
+      "headers": {
+        "Authorization": "Bearer bdr-test-token"
+      }
+    }
+  }
+}
+```
+
+### Using Real MSAL Tokens
+
+For production/staging with Azure AD:
+
+```bash
+# 1. Get token from Azure AD (client credentials or auth code flow)
+TOKEN=$(curl -s -X POST \
+  "https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id={client_id}&scope={api_scope}/.default&client_secret={client_secret}&grant_type=client_credentials" \
+  | jq -r '.access_token')
+
+# 2. Use the token with REST API
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8000/api/v1/translations
+
+# 3. Or configure MCP client with the token
+```
+
+> The token's `roles` claim (Azure AD App Roles) determines the user's permission level. The server maps the first matching role from the token to the internal role hierarchy.
+
+---
+
 ### Option 1 — Docker Compose (recommended)
 
 Starts PostgreSQL and the API server together.
